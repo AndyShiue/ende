@@ -1,0 +1,8 @@
+[package]
+name = "ende"
+version = "0.0.0"
+authors = ["andyshiue"]
+
+[dependencies]
+
+llvm-sys = "0.3.0"
