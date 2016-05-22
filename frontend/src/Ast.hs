@@ -4,6 +4,8 @@ module Ast ( Operator(..)
            , Statement(..)
            , Block(..)
            ) where
+import Foreign.Ptr
+import Foreign.StablePtr
 
 data Operator = Add | Sub | Mul | Div
 data Term = Literal Integer
@@ -19,3 +21,13 @@ data Statement = TermSemicolon Term | Let String Term | LetMut String Term | Mut
 data Block = Block { stmts :: [Statement]
                    , end :: Term
                    }
+block :: Block
+block = Block { stmts = [TermSemicolon (Literal 123)]
+              , end = Var "123"
+              }
+
+getTree :: IO (Ptr ())
+getTree = do
+  ptr <- newStablePtr block
+  return $ castStablePtrToPtr ptr
+foreign export ccall getTree :: IO (Ptr ())
