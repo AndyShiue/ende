@@ -15,8 +15,13 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
+executable dummy
+  build-depends:       base >=4.8 && <4.9
+                     , ende-frontend
+  main-is:             Dummy.hs 
+  ghc-options: -v 
 library
-  -- exposed-modules:     
+  exposed-modules:     Ast
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.8 && <4.9
