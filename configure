@@ -1,0 +1,17 @@
+#!/bin/bash
+export DYLD_LIBRARY_PATH=/Library/Developer/CommandLineTools/usr/lib
+SH=bash
+if [ ! -e rust-bindgen ]; then
+  git clone https://github.com/crabtw/rust-bindgen.git
+  if [ $? != 0 ]; then
+    echo "Failed to clone rust-bindgen"
+    exit 1
+  fi
+fi
+if [ ! -e frontend/.cabal-sandbox ]; then
+  cd frontend && cabal sandbox init
+  if [ $? != 0 ]; then
+    echo "Failed to initialize cabal sandbox"
+    exit 1
+  fi
+fi
