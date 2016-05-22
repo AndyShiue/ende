@@ -7,7 +7,10 @@ link_search=""
 include=""
 for word in $x ; do
     if [ "-" = "$(echo $word | head -c 1)" ]; then
-	args="$word $args"
+	echo $word | grep '-lHSende\|search\|_closure\|_info' > /dev/null
+	if [ $? -ne 0 ]; then
+	    args="$word $args"
+	fi
     fi
     if [ "-L" = "$(echo $word | head -c 2)" ]; then
 	#lib path
@@ -24,10 +27,21 @@ for word in $x ; do
     fi
     if [ "-l" = "$(echo $word | head -c 2)" ]; then
 	#lib
-	link_lib="$(echo $word | tail -c +3) $link_lib"
+	echo $word | grep '-lHSende\|search\|closure\|info' > /dev/null
+	if [ $? -ne 0 ]; then
+	    link_lib="$(echo $word | tail -c +3) $link_lib"
+	fi
     fi
 done
 echo $ghc_lib_path > ghc_lib_path
 echo $link_lib > link_lib
 echo $link_search > link_search
 echo $args > linker_args
+pkg_path_pre=$(echo $ghc_lib_path/*)
+pkg_path=""
+for word in $pkg_path_pre ; do
+    if [ -d "$word" ] ; then
+	pkg_path="$word $pkg_path"
+    fi
+done
+echo $pkg_path > all_pkg_path
