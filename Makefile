@@ -4,5 +4,4 @@ all:
 	make -C backend
 clean:
 	make -C frontend clean
-	rm -rf rust-bindgen
 	make -C backend clean
