@@ -1,4 +1,4 @@
 all:
-	cabal build
+	stack build
 clean:
-	cabal clean
+	stack clean

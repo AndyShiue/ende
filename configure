@@ -8,10 +8,3 @@ if [ ! -e rust-bindgen ]; then
     exit 1
   fi
 fi
-if [ ! -e frontend/.cabal-sandbox ]; then
-  cd frontend && cabal sandbox init
-  if [ $? != 0 ]; then
-    echo "Failed to initialize cabal sandbox"
-    exit 1
-  fi
-fi
