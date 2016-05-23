@@ -13,6 +13,7 @@ data Term = Literal Integer
           | Infix Term Operator Term
           | Call FunctionCall [Term]
           | Scope Block
+          | If Term Term Term
           | While Term Block
           deriving (Show, Eq)
 data FunctionCall = FunctionCall { name :: String

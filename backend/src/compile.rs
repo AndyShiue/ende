@@ -9,7 +9,9 @@ use ast::*;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Levity {
     Boxed,
-    Unboxed(i32),
+    Unboxed(
+        Option<i32> // The value if it's a constant.
+    ),
 }
 
 trait ToRaw: Into<Vec<u8>> {
@@ -46,6 +48,11 @@ impl<'a> Term<'a> {
                     .map(|arg| arg.rhs_vars())
                     .fold(HashSet::new(), |l, r| l.union(&r).cloned().collect()),
             Scope(ref block) => block.rhs_vars(),
+            If(ref cond, ref if_true, ref if_false) => {
+                let set: HashSet<_> =
+                    cond.rhs_vars().union(&if_true.rhs_vars()).cloned().collect();
+                set.union(&if_false.rhs_vars()).cloned().collect()
+            }
             While(ref cond, ref block) =>
                 cond.rhs_vars().union(&block.rhs_vars()).cloned().collect(),
         }
@@ -157,6 +164,11 @@ impl<'a> FuncsDecl<'a> for Term<'a> {
             Scope(ref block) => {
                 Ok(try!(block.find_funcs()))
             },
+            If(ref cond, ref if_true, ref if_false) => {
+                let fns: HashSet<_> =
+                    try!(cond.find_funcs()).union(&try!(if_true.find_funcs())).cloned().collect();
+                Ok(fns.union(&try!(if_false.find_funcs())).cloned().collect())
+            }
             While(ref cond, ref block) => {
                 Ok(try!(cond.find_funcs()).union(&try!(block.find_funcs())).cloned().collect())
             },
@@ -266,6 +278,105 @@ impl<'a> Compile<'a> for Term<'a> {
                 let block = try!(block_result);
                 Ok(block)
             }
+            If(ref cond, ref if_true, ref if_false) => {
+                use self::Levity::*;
+                // Build the condition.
+                let built_cond = try!(cond.build(module, func, entry, builder, env.clone()));
+                // And check if the condition equals to zero.
+                let zero = LLVMConstInt(LLVMIntType(32), 0, 0);
+                use llvm_sys::LLVMIntPredicate::LLVMIntEQ;
+                let is_zero = LLVMBuildICmp(
+                    builder, LLVMIntEQ, built_cond, zero, try!("iszero".to_raw())
+                );
+                // Create the basic blocks.
+                let then_branch = LLVMAppendBasicBlock(func, try!("then".to_raw()));
+                let else_branch = LLVMAppendBasicBlock(func, try!("else".to_raw()));
+                let next = LLVMAppendBasicBlock(func, try!("next".to_raw()));
+                LLVMBuildCondBr(builder, is_zero, else_branch, then_branch);
+                // Now go inside the true case.
+                LLVMPositionBuilderAtEnd(builder, then_branch);
+                // Create a new environment.
+                let mut new_env = env.clone();
+                // Build the phi nodes.
+                for (key, pair) in &env {
+                    if cond.rhs_vars().contains(key) {
+                        match pair.1 {
+                            Boxed => {
+                                let ty = LLVMPointerType(LLVMIntType(32), 0);
+                                let phi = LLVMBuildPhi(builder, ty, key.as_ptr() as *const i8);
+                                LLVMAddIncoming(phi,
+                                                [pair.0].as_mut_ptr(),
+                                                [entry].as_mut_ptr(),
+                                                1);
+                                new_env.insert(key, (phi, Boxed));
+                            }
+                            Unboxed(_) => {
+                                let name = try!((*key).to_raw());
+                                let phi =
+                                    LLVMBuildPhi(builder, LLVMIntType(32), name);
+                                let pair = *new_env.get(key).unwrap(); // Safe here.
+                                LLVMAddIncoming(phi,
+                                                [pair.0].as_mut_ptr(),
+                                                [entry].as_mut_ptr(),
+                                                1);
+                                // Update the enviroment.
+                                new_env.insert(key, (phi, pair.1));
+                            }
+                        }
+                    }
+                }
+                let then_val =
+                    try!(if_true.build(module, func, entry, builder, env.clone()));
+                LLVMBuildBr(builder, next);
+                // Switch to the false case and do everything again.
+                // The code below is copy-pasted for not overengineering.
+                LLVMPositionBuilderAtEnd(builder, else_branch);
+                let mut new_env = env.clone();
+                for (key, pair) in &env {
+                    if cond.rhs_vars().contains(key) {
+                        match pair.1 {
+                            Boxed => {
+                                let ty = LLVMPointerType(LLVMIntType(32), 0);
+                                let phi = LLVMBuildPhi(builder, ty, key.as_ptr() as *const i8);
+                                LLVMAddIncoming(phi,
+                                                [pair.0].as_mut_ptr(),
+                                                [entry].as_mut_ptr(),
+                                                1);
+                                new_env.insert(key, (phi, Boxed));
+                            }
+                            Unboxed(_) => {
+                                let name = try!((*key).to_raw());
+                                let phi =
+                                    LLVMBuildPhi(builder, LLVMIntType(32), name);
+                                let pair = *new_env.get(key).unwrap(); // Safe here.
+                                LLVMAddIncoming(phi,
+                                                [pair.0].as_mut_ptr(),
+                                                [entry].as_mut_ptr(),
+                                                1);
+                                // Update the enviroment.
+                                new_env.insert(key, (phi, pair.1));
+                            }
+                        }
+                    }
+                }
+                let else_val =
+                    try!(if_false.build(module, func, entry, builder, env.clone()));
+                LLVMBuildBr(builder, next);
+                // Place The builder at the end of the last loop.
+                LLVMPositionBuilderAtEnd(builder, next);
+                // New enviroment, again.
+                let mut new_env = env.clone();
+                // Build the last phi node representing the value of the whole if-then-else clause.
+                let if_str = "if";
+                let name = try!(if_str.to_raw());
+                let phi = LLVMBuildPhi(builder, LLVMIntType(32), name);
+                LLVMAddIncoming(phi,
+                                [then_val, else_val].as_mut_ptr(),
+                                [then_branch, else_branch].as_mut_ptr(),
+                                2);
+                new_env.insert(if_str, (phi, Unboxed(None)));
+                Ok(phi)
+            }
             While(ref cond, ref block) => {
                 // Build the condition.
                 // It has to be done first because it could mutate variables.
@@ -321,7 +432,9 @@ impl<'a> Compile<'a> for Term<'a> {
                     builder, LLVMIntEQ, built_cond, zero, try!("iszero".to_raw())
                 );
                 LLVMBuildCondBr(builder, is_zero, after_loop, loop_block);
+                // Place The builder at the end of the last loop.
                 LLVMPositionBuilderAtEnd(builder, after_loop);
+                // Done.
                 Ok(zero)
             }
         }
@@ -374,7 +487,7 @@ impl<'a> Compile<'a> for Block<'a> {
                 Let(ref lhs, ref rhs) => {
                     let value = try!(rhs.build(module, func, entry, builder, *env.clone()));
                     let content_val = LLVMConstIntGetSExtValue(value) as i32;
-                    env.insert(lhs, (value, Unboxed(content_val)));
+                    env.insert(lhs, (value, Unboxed(Some(content_val))));
                 }
                 LetMut(ref lhs, ref rhs) => {
                     let alloca =

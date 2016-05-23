@@ -25,6 +25,7 @@ pub fn main() {
     use ende::ast::Term::*;
     use ende::ast::Statement::*;
     use ende::compile::*;
+
     let stmt = LetMut("count", Literal(10));
     let cond_block = Block { stmts: &[Mutate("count", infix!(Var("count"), Sub, Literal(1)))],  end: Box::new(Var("count")) };
     let cond_term = Scope(cond_block);

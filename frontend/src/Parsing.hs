@@ -47,6 +47,16 @@ functionCall = do
 scope :: Parser Term
 scope = Scope <$> block
 
+if_clause :: Parser Term
+if_clause = do
+  symbol "if" <?> "if"
+  cond <- term
+  symbol "then" <?> "then"
+  then_part <- term
+  symbol "else" <?> "else"
+  else_part <- term
+  return $ If cond then_part else_part
+
 while :: Parser Term
 while = do
   symbol "while" <?> "while"
@@ -59,6 +69,7 @@ term =
    (try functionCall <?> "function call") <|>
    (try var <?> "variable") <|>
    (scope <?> "scope")
+   (if_clause <?> "if clause")
    (while <?> "while loop")
    (literal <?> "literal")
 

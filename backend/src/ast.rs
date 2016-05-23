@@ -19,6 +19,7 @@ pub enum Term<'a> {
     Infix(Box<Term<'a>>, Operator, Box<Term<'a>>),
     Call(FunctionCall<'a>, &'a [Term<'a>]),
     Scope(Block<'a>),
+    If(Box<Term<'a>>, Box<Term<'a>>, Box<Term<'a>>),
     While(Box<Term<'a>>, Block<'a>),
 }
 
