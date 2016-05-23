@@ -1,5 +1,5 @@
 #!/bin/bash
-x=$(cat log | grep -E2 Linker |tail -n 2|head -n 1 |sed 's/^.*\(-L.*\)/\1/g'|sed 's/-W/-/g' |sed 's/,-u,//g')
+x=$(cat log | grep -E2 Linker |tail -n 2|head -n 1 |sed 's/^.*\(-L.*\)/\1/g'|sed 's/-W/-/g')
 args=""
 ghc_lib_path=""
 link_lib=""
@@ -7,7 +7,7 @@ link_search=""
 include=""
 for word in $x ; do
     if [ "-" = "$(echo $word | head -c 1)" ]; then
-	echo $word | grep '-lHSende\|search\|_closure\|_info' > /dev/null
+	echo $word | grep '-lHSende\|search_paths_first\|,-u,' > /dev/null
 	if [ $? -ne 0 ]; then
 	    args="$word $args"
 	fi
@@ -27,7 +27,7 @@ for word in $x ; do
     fi
     if [ "-l" = "$(echo $word | head -c 2)" ]; then
 	#lib
-	echo $word | grep '-lHSende\|search\|closure\|info' > /dev/null
+	echo $word | grep '-lHSende\|search_paths_first\|,-u,' > /dev/null
 	if [ $? -ne 0 ]; then
 	    link_lib="$(echo $word | tail -c +3) $link_lib"
 	fi
