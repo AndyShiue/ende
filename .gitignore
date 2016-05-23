@@ -15,6 +15,7 @@ frontend/rts.rs
 frontend/dist/*
 frontend/src/Ast.o
 frontend/src/Ast_stub.h
+rust-bindgen
 rust-bindgen/*
 backend/target/*
 backend/Cargo.lock
