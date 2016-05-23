@@ -1,8 +1,23 @@
 extern crate llvm_sys;
+extern crate core;
 #[macro_use]
 extern crate ende;
 
 use llvm_sys::core::*;
+use core::mem::transmute;
+fn haskell_init() {
+    let filename : &[u8] = b"main\x00";
+    let mut argc : i32 = 1;
+    let mut argv : & [*const u8] = &[filename.as_ptr(),::core::ptr::null()];
+    unsafe {
+        ende::Rts::hs_init(&mut argc, transmute(&mut argv));
+    }
+}
+fn haskell_exit() {
+    unsafe {
+        ende::Rts::hs_exit();
+    }
+}
 
 pub fn main() {
     use ende::ast::*;
@@ -19,10 +34,13 @@ pub fn main() {
     let stmt = Scope(Block { stmts: stmts, end: Box::new(While(Box::new(cond_term), inner_block)) });
 
     unsafe {
+        haskell_init();
+        let tree_prim = ende::Ast::getTree();
         println!("{:?}", stmt.clone().gen_module());
 
         let module = stmt.gen_module().ok().unwrap();
         LLVMDumpModule(module.clone());
         emit_ir(module);
+        haskell_exit();
     }
 }

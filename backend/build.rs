@@ -13,37 +13,37 @@ fn main() {
     link_search.read_to_string(&mut search_data).unwrap();
     link_lib.read_to_string(&mut lib_data).unwrap();
     pkg.read_to_string(&mut pkg_data).unwrap();
-/*
+    let mut search_args : Vec<String> = Vec::new();
+    let mut lib_args : Vec<String> = Vec::new();
     for i in search_data.split(' ') {
         if i != "" {
-            println!("cargo:rustc-libdir={}", i);
+            search_args.push("-L".to_string());
+            search_args.push(i.to_string());
         }
     }
-*/
-
-    let mut linker_args_data = String::new();
-    let mut linker_args = File::open("../frontend/linker_args").unwrap();
-    linker_args.read_to_string(&mut linker_args_data).unwrap();
-
-    for i in linker_args_data.split(' ') {
+    for i in lib_data.split(' ') {
         if i != "" {
-            let bytes = i.as_bytes();
-            if bytes.len() > 2 {
-                use std::str::from_utf8;
-                println!("cargo:rustc-flags={} {}", from_utf8(&bytes[0..2]).unwrap(), from_utf8(&bytes[2..(bytes.len())]).unwrap());
-            }
+            lib_args.push("-l".to_string());
+            lib_args.push(i.to_string());
         }
     }
+    println!("cargo:rustc-flags={}", search_args.join(" "));
+    println!("cargo:rustc-flags={}", lib_args.join(" "));
+
+    let mut pkg_args : Vec<String> = Vec::new();
     for i in pkg_data.split(' ') {
         if i != "" {
             if i.contains("base") || i.contains("gmp") || i.contains("integ") || i.contains("ghcpr") {
-                println!("cargo:rustc-flags={} {}", "-L", i);
+                pkg_args.push("-L".to_string());
+                pkg_args.push(i.to_string());
             }
         }
     }
+
+    println!("cargo:rustc-flags={}", pkg_args.join(" "));
 
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     println!("cargo:rustc-flags=-L {}/../frontend", manifest_dir);
     println!("cargo:rustc-link-lib=static=Ast");
-//    panic!("asdf");
+//    panic!("sf");
 }

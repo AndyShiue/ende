@@ -5,6 +5,3 @@ all:
 clean:
 	make -C frontend clean
 	make -C backend clean
-test:
-	make all
-	make -C backend test
