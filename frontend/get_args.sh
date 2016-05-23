@@ -18,7 +18,6 @@ for word in $x ; do
 	    if [ $? -eq 0 ]; then
 		temp=$(echo "$word/.." | tail -c +3)
 		if [ -e "$temp/include/HsFFI.h" ]; then
-		    temp=$(realpath $temp)
 		    echo "Found ghc lib path: $temp"
 		    ghc_lib_path=$temp
 		fi
