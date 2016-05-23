@@ -7,27 +7,22 @@ module Ast ( Operator(..)
 import Foreign.Ptr
 import Foreign.StablePtr
 
-data Operator = Add | Sub | Mul | Div
+data Operator = Add | Sub | Mul | Div deriving (Show, Eq)
 data Term = Literal Integer
           | Var String
           | Infix Term Operator Term
           | Call FunctionCall [Term]
           | Scope Block
           | While Term Block
+          deriving (Show, Eq)
 data FunctionCall = FunctionCall { name :: String
                                  , arity :: Int
-                                 }
-data Statement = TermSemicolon Term | Let String Term | LetMut String Term | Mutate String Term
+                                 } deriving (Show, Eq)
+data Statement = TermSemicolon Term
+               | Let String Term
+               | LetMut String Term
+               | Mutate String Term
+               deriving (Show, Eq)
 data Block = Block { stmts :: [Statement]
                    , end :: Term
-                   }
-block :: Block
-block = Block { stmts = [TermSemicolon (Literal 123)]
-              , end = Var "123"
-              }
-
-getTree :: IO (Ptr ())
-getTree = do
-  ptr <- newStablePtr block
-  return $ castStablePtrToPtr ptr
-foreign export ccall getTree :: IO (Ptr ())
+                   } deriving (Show, Eq)
