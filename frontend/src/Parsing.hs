@@ -50,17 +50,17 @@ scope = Scope <$> block
 if_clause :: Parser Term
 if_clause = do
   symbol "if" <?> "if"
-  cond <- term
+  cond <- expr
   symbol "then" <?> "then"
-  then_part <- term
+  then_part <- expr
   symbol "else" <?> "else"
-  else_part <- term
+  else_part <- expr
   return $ If cond then_part else_part
 
 while :: Parser Term
 while = do
   symbol "while" <?> "while"
-  t <- term
+  t <- expr
   b <- block
   return $ while t b
 
