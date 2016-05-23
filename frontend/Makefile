@@ -1,6 +1,6 @@
 all:
 	make clean
-	stack build 2> log
+	stack build 2> log || (cat log && false)
 	./get_args.sh
 	stack exec ghc -- src/Ast.hs
 	./bind.sh
