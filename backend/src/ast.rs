@@ -38,7 +38,7 @@ pub enum Statement<'a> {
     Let(&'a str, Term<'a>),
     LetMut(&'a str, Term<'a>),
     Mutate(&'a str, Term<'a>),
-    Extern(&'a str, i32),
+    Extern(&'a str, u32),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -38,7 +38,7 @@ pub struct EnvData {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Type {
     Base,
-    Function(i32),
+    Function(u32),
 }
 
 impl<'a> Term<'a> {
@@ -94,24 +94,7 @@ impl<'a> Block<'a> {
     }
 }
 
-pub trait FuncsDecl<'a> {
-    fn find_funcs(self: &'a Self) -> Result<HashSet<&'a FunctionCall<'a>>, String>;
-    unsafe fn decl_funcs(self: &'a Self, module: LLVMModuleRef) -> Result<(), String> {
-        let funcs = try!(self.find_funcs());
-        for func in funcs {
-            let ret_ty = LLVMInt32Type();
-            let args_ty = (&mut *vec![LLVMInt32Type(); func.arity as usize]).as_mut_ptr();
-            let func_ty = LLVMFunctionType(ret_ty, args_ty, func.arity, 0);
-            LLVMAddFunction(
-                // Actually unnessasary clone.
-                module, try!(func.name.to_raw().map_err(|err| err[0].clone())), func_ty
-            );
-        }
-        Ok(())
-    }
-}
-
-pub trait Compile<'a>: FuncsDecl<'a> {
+pub trait Compile<'a> {
 
     type Env;
 
@@ -146,47 +129,10 @@ pub trait Compile<'a>: FuncsDecl<'a> {
         let func_ty = LLVMFunctionType(LLVMInt32Type(), args.as_mut_ptr() , 0, 0);
         let func = LLVMAddFunction(module, try!("main".to_raw()), func_ty);
         let builder = LLVMCreateBuilder();
-        try!(self.decl_funcs(module).map_err(|err| vec![err]));
         try!(self.init_module(module, func, builder));
         Ok(module)
     }
 
-}
-
-impl<'a> FuncsDecl<'a> for Term<'a> {
-    fn find_funcs(self: &'a Term<'a>) -> Result<HashSet<&'a FunctionCall<'a>>, String> {
-        use ast::Term::*;
-        match *self {
-            Literal(_) | Var(_) => Ok(HashSet::new()),
-            Infix(ref left, _, ref right) => {
-                Ok(try!(left.find_funcs()).union(&try!(right.find_funcs())).cloned().collect())
-            }
-            Call(ref call, ref args) => {
-                let mut func_calls = HashSet::new();
-                let bool =
-                    func_calls.iter().any(|old_call: &&FunctionCall| old_call.name == call.name);
-                if bool {
-                    return Err(call.name.to_string() + " is called with different parameters.")
-                }
-                func_calls.insert(call);
-                for arg in *args {
-                    func_calls = func_calls.union(&try!(arg.find_funcs())).cloned().collect();
-                }
-                Ok(func_calls)
-            }
-            Scope(ref block) => {
-                Ok(try!(block.find_funcs()))
-            },
-            If(ref cond, ref if_true, ref if_false) => {
-                let fns: HashSet<_> =
-                    try!(cond.find_funcs()).union(&try!(if_true.find_funcs())).cloned().collect();
-                Ok(fns.union(&try!(if_false.find_funcs())).cloned().collect())
-            }
-            While(ref cond, ref block) => {
-                Ok(try!(cond.find_funcs()).union(&try!(block.find_funcs())).cloned().collect())
-            },
-        }
-    }
 }
 
 impl<'a> Compile<'a> for Term<'a> {
@@ -226,14 +172,35 @@ impl<'a> Compile<'a> for Term<'a> {
                 }
             }
             Call(ref func_call, ref args) => {
-                let llvm_func =
-                    LLVMGetNamedFunction(module,
-                        try!(func_call.name.to_raw())
-                    );
+
+                let name = func_call.name;
+                let llvm_func = if let Some(env_data) = env.get(&name) {
+                    let expected_arity;
+                    if let Function(arity) = env_data.ty {
+                        expected_arity = arity;
+                    } else {
+                        unreachable!();
+                    };
+                    let actual_arity = (*args).len();
+                    if expected_arity != actual_arity as u32 {
+                        let expected_arity_str = &*expected_arity.to_string();
+                        let actual_arity_str = &*expected_arity.to_string();
+                        return Err(vec![
+                            String::from("function ") + name + " expect " + expected_arity_str +
+                            " parameters, but " + actual_arity_str + " parameters are provided."
+                        ]);
+                    }
+                    env_data.llvm_value
+                } else {
+                    return
+                        Err(vec![String::from("Function ") + name + " hasn't been declared yet."]);
+                };
+
                 let results: Vec<Result<LLVMValueRef, Vec<String>>> =
                     args.iter()
                         .map(|term| term.build(module, func, entry, builder, env.clone()))
                         .collect();
+
                 // It's really so painful.
                 // Read the types of `results` and `result_args` to know what I'm doing.
                 let result_args: Result<Vec<LLVMValueRef>, Vec<String>> =
@@ -258,6 +225,7 @@ impl<'a> Compile<'a> for Term<'a> {
                                          }
                                      }
                                  });
+
                 // let mut raw_args = try!(result_args).as_mut_ptr();
                 // The above line makes the program segfault. Wierd.
                 let mut args: Vec<LLVMValueRef> = try!(result_args);
@@ -489,30 +457,6 @@ impl<'a> Compile<'a> for Term<'a> {
 
 }
 
-impl<'a> FuncsDecl<'a> for Statement<'a> {
-    fn find_funcs(self: &'a Statement<'a>) -> Result<HashSet<&'a FunctionCall<'a>>, String> {
-        use ast::Statement::*;
-        match *self {
-            TermSemicolon(ref term) => term.find_funcs(),
-            Let(_, ref rhs) => rhs.find_funcs(),
-            LetMut(_, ref rhs) => rhs.find_funcs(),
-            Mutate(_, ref rhs) => rhs.find_funcs(),
-            Extern(..) => unimplemented!(),
-        }
-    }
-}
-
-impl<'a> FuncsDecl<'a> for Block<'a> {
-    fn find_funcs(self: &'a Block<'a>) -> Result<HashSet<&'a FunctionCall<'a>>, String> {
-        let mut funcs = HashSet::new();
-        for stmt in self.stmts {
-            funcs = funcs.union(&try!(stmt.find_funcs())).cloned().collect()
-        }
-        funcs = funcs.union(&try!(self.end.find_funcs())).cloned().collect();
-        Ok(funcs)
-    }
-}
-
 impl<'a> Compile<'a> for Block<'a> {
 
     type Env = Box<Map<'a, EnvData>>;
@@ -561,8 +505,20 @@ impl<'a> Compile<'a> for Block<'a> {
                                             lhs + " is immutable, so it cannot be mutated."]),
                     }
                 }
-                Extern(lhs, rhs) => {
-                    unimplemented!();
+                Extern(name, arity) => {
+                    let ret_ty = LLVMInt32Type();
+                    let args_ty = (&mut *vec![LLVMInt32Type(); arity as usize]).as_mut_ptr();
+                    let func_ty = LLVMFunctionType(ret_ty, args_ty, arity, 0);
+                    let func = LLVMAddFunction(
+                        // Actually unnessasary clone.
+                        module, try!(name.to_raw().map_err(|err| vec![err[0].clone()])), func_ty
+                    );
+                    let env_data = EnvData {
+                        llvm_value: func,
+                        direction: Direct,
+                        ty: Function(arity)
+                    };
+                    env.insert(name, env_data);
                 }
             }
         }

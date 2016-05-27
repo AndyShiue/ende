@@ -31,7 +31,7 @@ pub fn main() {
     let cond_term = Scope(cond_block);
     let a = &[Var("count")];
     let inner_block = Block { stmts: &[], end: Box::new(Call(FunctionCall { name: "print", arity: 1 }, a )) };
-    let stmts = &[stmt];
+    let stmts = &[Extern("print", 1), stmt];
     let stmt = Scope(Block { stmts: stmts, end: Box::new(While(Box::new(cond_term), inner_block)) });
 
     unsafe {
