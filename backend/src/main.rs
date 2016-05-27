@@ -5,18 +5,14 @@ extern crate ende;
 
 use llvm_sys::core::*;
 use core::mem::transmute;
-fn haskell_init() {
+unsafe fn haskell_init() {
     let filename : &[u8] = b"main\x00";
     let mut argc : i32 = 1;
     let mut argv : & [*const u8] = &[filename.as_ptr(),::core::ptr::null()];
-    unsafe {
-        ende::Rts::hs_init(&mut argc, transmute(&mut argv));
-    }
+    ende::Rts::hs_init(&mut argc, transmute(&mut argv));
 }
-fn haskell_exit() {
-    unsafe {
-        ende::Rts::hs_exit();
-    }
+unsafe fn haskell_exit() {
+    ende::Rts::hs_exit();
 }
 
 pub fn main() {
