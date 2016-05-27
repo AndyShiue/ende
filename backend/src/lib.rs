@@ -1,7 +1,7 @@
 extern crate llvm_sys;
 
 pub mod ast;
-pub mod compile;
+pub mod codegen;
 #[allow(dead_code, non_camel_case_types, non_snake_case)]
 pub mod Ast {
     include!("../../frontend/Ast.rs");
