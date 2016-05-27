@@ -23,6 +23,7 @@ data Statement = TermSemicolon Term
                | Let String Term
                | LetMut String Term
                | Mutate String Term
+               | Extern String Int
                deriving (Show, Eq)
 data Block = Block { stmts :: [Statement]
                    , end :: Term

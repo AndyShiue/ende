@@ -130,9 +130,20 @@ mutate = do
   semicolon
   return $ Mutate var rhs
 
+extern_stmt :: Parser Statement
+extern_stmt = do
+  symbol "extern" <?> "extern"
+  fn <- lexeme (some letterChar) <?> "extern function name"
+  arity <- read <$> (lexeme $ someTill digitChar space)
+  return $ Extern fn arity
+
 statement :: Parser Statement
 statement =
-  try letMut <|> try mutate <|> letBinding <|> termSemicolon <?> "statement"
+  try letMut <|>
+  try mutate <|>
+  extern_stmt <|>
+  letBinding <|>
+  termSemicolon <?> "statement"
 
 block :: Parser Block
 block = do
