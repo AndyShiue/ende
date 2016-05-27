@@ -5,14 +5,7 @@ use llvm_sys::prelude::*;
 use llvm_sys::core::*;
 
 use ast::*;
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Levity {
-    Boxed,
-    Unboxed(
-        Option<i32> // The value if it's a constant.
-    ),
-}
+use self::Type::*;
 
 trait ToRaw: Into<Vec<u8>> {
     fn to_raw(self) -> Result<*const c_char, Vec<String>>;
@@ -27,7 +20,26 @@ impl<'a> ToRaw for &'a str {
     }
 }
 
-pub type Map<'a> = HashMap<&'a str, (LLVMValueRef, Levity)>;
+pub type Map<'a, T> = HashMap<&'a str, T>;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Direction {
+    Indirect,
+    Direct,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct EnvData {
+    llvm_value: LLVMValueRef,
+    direction: Direction,
+    ty: Type,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Type {
+    Base,
+    Function(i32),
+}
 
 impl<'a> Term<'a> {
     pub fn rhs_vars(self: &'a Term<'a>) -> HashSet<&'a str> {
@@ -67,6 +79,7 @@ impl<'a> Statement<'a> {
             Let(_, ref rhs) => rhs.rhs_vars(),
             LetMut(_, ref rhs) => rhs.rhs_vars(),
             Mutate(_, ref rhs) => rhs.rhs_vars(),
+            Extern(_, _) => HashSet::new(),
         }
     }
 }
@@ -178,7 +191,7 @@ impl<'a> FuncsDecl<'a> for Term<'a> {
 
 impl<'a> Compile<'a> for Term<'a> {
 
-    type Env = Map<'a>;
+    type Env = Map<'a, EnvData>;
 
     fn new_env() -> Self::Env { Map::new() }
 
@@ -261,12 +274,12 @@ impl<'a> Compile<'a> for Term<'a> {
             Var(ref str) => {
                 match env.get(str) {
                     Some(pair) => {
-                        use self::Levity::*;
-                        match pair.1 {
-                            Boxed => Ok(LLVMBuildLoad(
-                                builder, pair.0, try!("load".to_raw())
+                        use self::Direction::*;
+                        match pair.direction {
+                            Indirect => Ok(LLVMBuildLoad(
+                                builder, pair.llvm_value, try!("load".to_raw())
                             )),
-                            Unboxed(_) => Ok(pair.0),
+                            Direct => Ok(pair.llvm_value),
                         }
                     }
                     None => Err(vec![String::from("Variable ") + str + " isn't declared yet."]),
@@ -279,7 +292,7 @@ impl<'a> Compile<'a> for Term<'a> {
                 Ok(block)
             }
             If(ref cond, ref if_true, ref if_false) => {
-                use self::Levity::*;
+                use self::Direction::*;
                 // Build the condition.
                 let built_cond = try!(cond.build(module, func, entry, builder, env.clone()));
                 // And check if the condition equals to zero.
@@ -298,29 +311,40 @@ impl<'a> Compile<'a> for Term<'a> {
                 // Create a new environment.
                 let mut new_env = env.clone();
                 // Build the phi nodes.
-                for (key, pair) in &env {
+                for (key, env_data) in &env {
                     if cond.rhs_vars().contains(key) {
-                        match pair.1 {
-                            Boxed => {
+                        match env_data.direction {
+                            Indirect => {
                                 let ty = LLVMPointerType(LLVMIntType(32), 0);
                                 let phi = LLVMBuildPhi(builder, ty, key.as_ptr() as *const i8);
                                 LLVMAddIncoming(phi,
-                                                [pair.0].as_mut_ptr(),
+                                                [env_data.llvm_value].as_mut_ptr(),
                                                 [entry].as_mut_ptr(),
                                                 1);
-                                new_env.insert(key, (phi, Boxed));
+                                let new_data = EnvData {
+                                    llvm_value: phi,
+                                    direction: Indirect,
+                                    ty: Base,
+                                };
+                                new_env.insert(key, new_data);
                             }
-                            Unboxed(_) => {
+                            Direct => {
                                 let name = try!((*key).to_raw());
                                 let phi =
                                     LLVMBuildPhi(builder, LLVMIntType(32), name);
-                                let pair = *new_env.get(key).unwrap(); // Safe here.
+                                let another_env = env.clone();
+                                let old_data = another_env.get(key).unwrap(); // Safe here.
                                 LLVMAddIncoming(phi,
-                                                [pair.0].as_mut_ptr(),
+                                                [old_data.llvm_value].as_mut_ptr(),
                                                 [entry].as_mut_ptr(),
                                                 1);
                                 // Update the enviroment.
-                                new_env.insert(key, (phi, pair.1));
+                                let new_data = EnvData {
+                                    llvm_value: phi,
+                                    direction: old_data.direction,
+                                    ty: Base,
+                                };
+                                new_env.insert(key, new_data);
                             }
                         }
                     }
@@ -332,29 +356,40 @@ impl<'a> Compile<'a> for Term<'a> {
                 // The code below is copy-pasted for not overengineering.
                 LLVMPositionBuilderAtEnd(builder, else_branch);
                 let mut new_env = env.clone();
-                for (key, pair) in &env {
+                for (key, env_data) in &env {
                     if cond.rhs_vars().contains(key) {
-                        match pair.1 {
-                            Boxed => {
+                        match env_data.direction {
+                            Indirect => {
                                 let ty = LLVMPointerType(LLVMIntType(32), 0);
                                 let phi = LLVMBuildPhi(builder, ty, key.as_ptr() as *const i8);
                                 LLVMAddIncoming(phi,
-                                                [pair.0].as_mut_ptr(),
+                                                [env_data.llvm_value].as_mut_ptr(),
                                                 [entry].as_mut_ptr(),
                                                 1);
-                                new_env.insert(key, (phi, Boxed));
+                                let env_data = EnvData {
+                                    llvm_value: phi,
+                                    direction: Indirect,
+                                    ty: Base,
+                                };
+                                new_env.insert(key, env_data);
                             }
-                            Unboxed(_) => {
+                            Direct => {
                                 let name = try!((*key).to_raw());
                                 let phi =
                                     LLVMBuildPhi(builder, LLVMIntType(32), name);
-                                let pair = *new_env.get(key).unwrap(); // Safe here.
+                                let another_env = env.clone();
+                                let old_data = another_env.get(key).unwrap(); // Safe here.
                                 LLVMAddIncoming(phi,
-                                                [pair.0].as_mut_ptr(),
+                                                [old_data.llvm_value].as_mut_ptr(),
                                                 [entry].as_mut_ptr(),
                                                 1);
                                 // Update the enviroment.
-                                new_env.insert(key, (phi, pair.1));
+                                let new_data = EnvData {
+                                    llvm_value: phi,
+                                    direction: old_data.direction,
+                                    ty: Base,
+                                };
+                                new_env.insert(key, new_data);
                             }
                         }
                     }
@@ -374,7 +409,8 @@ impl<'a> Compile<'a> for Term<'a> {
                                 [then_val, else_val].as_mut_ptr(),
                                 [then_branch, else_branch].as_mut_ptr(),
                                 2);
-                new_env.insert(if_str, (phi, Unboxed(None)));
+                let env_data = EnvData { llvm_value: phi, direction: Direct, ty: Base };
+                new_env.insert(if_str, env_data);
                 Ok(phi)
             }
             While(ref cond, ref block) => {
@@ -398,29 +434,40 @@ impl<'a> Compile<'a> for Term<'a> {
                 // Build the phi nodes.
                 for (key, pair) in &env {
                     if cond.rhs_vars().contains(key) {
-                        use self::Levity::*;
-                        match pair.1 {
-                            Boxed => {
+                        use self::Direction::*;
+                        match pair.direction {
+                            Indirect => {
                                 let ty = LLVMPointerType(LLVMIntType(32), 0);
                                 let phi = LLVMBuildPhi(builder, ty, key.as_ptr() as *const i8);
-                                let old_ptr = (&env.get(key)).unwrap().0;
+                                let old_ptr = (&env.get(key)).unwrap().llvm_value;
                                 LLVMAddIncoming(phi,
                                                 [old_ptr, phi].as_mut_ptr(),
                                                 [entry, loop_block].as_mut_ptr(),
                                                 2);
-                                new_env.insert(key, (phi, Boxed));
+                                let env_data = EnvData {
+                                    llvm_value: phi,
+                                    direction: Indirect,
+                                    ty: Base,
+                                };
+                                new_env.insert(key, env_data);
                             }
-                            Unboxed(_) => {
+                            Direct => {
                                 let name = try!((*key).to_raw());
                                 let phi =
                                     LLVMBuildPhi(builder, LLVMIntType(32), name);
-                                let pair = *new_env.get(key).unwrap(); // Safe here.
+                                let another_env = env.clone();
+                                let old_data = another_env.get(key).unwrap(); // Safe here.
                                 LLVMAddIncoming(phi,
-                                                [pair.0, phi].as_mut_ptr(),
+                                                [old_data.llvm_value, phi].as_mut_ptr(),
                                                 [entry, loop_block].as_mut_ptr(),
                                                 2);
                                 // Update the enviroment.
-                                new_env.insert(key, (phi, pair.1));
+                                let new_data = EnvData {
+                                    llvm_value: phi,
+                                    direction: old_data.direction,
+                                    ty: Base,
+                                };
+                                new_env.insert(key, new_data);
                             }
                         }
                     }
@@ -450,6 +497,7 @@ impl<'a> FuncsDecl<'a> for Statement<'a> {
             Let(_, ref rhs) => rhs.find_funcs(),
             LetMut(_, ref rhs) => rhs.find_funcs(),
             Mutate(_, ref rhs) => rhs.find_funcs(),
+            Extern(..) => unimplemented!(),
         }
     }
 }
@@ -467,7 +515,7 @@ impl<'a> FuncsDecl<'a> for Block<'a> {
 
 impl<'a> Compile<'a> for Block<'a> {
 
-    type Env = Box<Map<'a>>;
+    type Env = Box<Map<'a, EnvData>>;
 
     fn new_env() ->  Self::Env { Box::new(Map::new()) }
 
@@ -477,7 +525,7 @@ impl<'a> Compile<'a> for Block<'a> {
                     entry: LLVMBasicBlockRef,
                     builder: LLVMBuilderRef,
                     mut env: Self::Env) -> Result<LLVMValueRef, Vec<String>> {
-        use self::Levity::*;
+        use self::Direction::*;
         use ast::Statement::*;
         for stmt in self.stmts {
             match *stmt {
@@ -486,31 +534,35 @@ impl<'a> Compile<'a> for Block<'a> {
                 }
                 Let(ref lhs, ref rhs) => {
                     let value = try!(rhs.build(module, func, entry, builder, *env.clone()));
-                    let content_val = LLVMConstIntGetSExtValue(value) as i32;
-                    env.insert(lhs, (value, Unboxed(Some(content_val))));
+                    let env_data = EnvData { llvm_value: value, direction: Direct, ty: Base };
+                    env.insert(lhs, env_data);
                 }
                 LetMut(ref lhs, ref rhs) => {
                     let alloca =
                         LLVMBuildAlloca(builder, LLVMInt32Type(), lhs.as_ptr() as *const i8);
                     let built_rhs = try!(rhs.build(module, func, entry, builder, *env.clone()));
                     LLVMBuildStore(builder, built_rhs, alloca);
-                    env.insert(lhs, (alloca, Boxed));
+                    let env_data = EnvData { llvm_value: alloca, direction: Indirect, ty: Base };
+                    env.insert(lhs, env_data);
                 }
                 Mutate(ref lhs, ref rhs) => {
                     let var_result = match env.get(lhs) {
-                        Some(var) => Ok(*var),
+                        Some(var) => Ok(var.clone()),
                         None => Err(
                             vec![String::from("Variable ") + lhs + " isn't declared yet."]
                         ),
                     };
                     let built_rhs = try!(rhs.build(module, func, entry, builder, *env.clone()));
-                    let pair = try!(var_result);
-                    match pair.1 {
-                        Boxed => { LLVMBuildStore(builder, built_rhs, pair.0); }
-                        Unboxed(_) =>
+                    let env_data = try!(var_result);
+                    match env_data.direction {
+                        Indirect => { LLVMBuildStore(builder, built_rhs, env_data.llvm_value); }
+                        Direct =>
                             return Err(vec![String::from("Variable ") +
                                             lhs + " is immutable, so it cannot be mutated."]),
                     }
+                }
+                Extern(lhs, rhs) => {
+                    unimplemented!();
                 }
             }
         }
