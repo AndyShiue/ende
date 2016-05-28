@@ -73,8 +73,8 @@ term =
    (try functionCall <?> "function call") <|>
    (try var <?> "variable") <|>
    (try literal <?> "literal") <|>
-   (scope <?> "scope") <|>
-   (if_clause <?> "if clause") <|>
+   (try scope <?> "scope") <|>
+   (try if_clause <?> "if clause") <|>
    (while <?> "while loop")
 
 opToString :: Operator -> String
