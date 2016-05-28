@@ -176,4 +176,4 @@ block' = toBlock "{ let mut a = while 0 { foo(b, 1 + 1) }; 6 + 3 * 5 }"
 getTree :: IO (StablePtr Block)
 getTree = newStablePtr $!! block'
 
---foreign export ccall getTree :: IO (StablePtr Block)
+foreign export ccall getTree :: IO (StablePtr Block)
