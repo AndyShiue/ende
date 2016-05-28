@@ -70,12 +70,12 @@ while = do
 
 term :: Parser Term
 term =
+   (try if_clause <?> "if clause") <|>
+   (try while <?> "while loop") <|>
    (try functionCall <?> "function call") <|>
    (try var <?> "variable") <|>
    (try literal <?> "literal") <|>
-   (try scope <?> "scope") <|>
-   (try if_clause <?> "if clause") <|>
-   (while <?> "while loop")
+   (try scope <?> "scope")
 
 opToString :: Operator -> String
 opToString Add = "+"
@@ -145,21 +145,21 @@ statement :: Parser Statement
 statement =
   try letMut <|>
   try mutate <|>
-  extern_stmt <|>
-  letBinding <|>
-  termSemicolon <?> "statement"
+  try extern_stmt <|>
+  try letBinding <|>
+  try termSemicolon <?> "statement"
 
 block :: Parser Block
 block = do
   symbol "{"
-  stmts <- some $ statement
+  stmts <- many statement
   end <- optional expr
   symbol "}"
   let (realStmts, realEnd) = case end of
                                Just term -> (stmts, fromJust end)
                                Nothing -> case stmts of
                                             -- TODO: Handle the error properly.
-                                            [] -> error "Found an empty block"
+                                            [] -> error "No statement"
                                             _  -> (init stmts, Stmt $ last stmts)
   return $ Block realStmts realEnd
 
@@ -176,4 +176,4 @@ block' = toBlock "{ let mut a = while 0 { foo(b, 1 + 1) }; 6 + 3 * 5 }"
 getTree :: IO (StablePtr Block)
 getTree = newStablePtr $!! block'
 
-foreign export ccall getTree :: IO (StablePtr Block)
+--foreign export ccall getTree :: IO (StablePtr Block)
