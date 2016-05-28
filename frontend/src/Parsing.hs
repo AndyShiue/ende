@@ -2,6 +2,10 @@ module Parsing
   ( block
   ) where
 
+import Foreign.Ptr
+import Foreign.StablePtr
+
+import Data.Maybe
 import Control.Monad (void)
 
 import Text.Megaparsec hiding (space)
@@ -62,15 +66,15 @@ while = do
   symbol "while" <?> "while"
   t <- expr
   b <- block
-  return $ while t b
+  return $ While t b
 
 term :: Parser Term
 term =
    (try functionCall <?> "function call") <|>
    (try var <?> "variable") <|>
-   (scope <?> "scope")
-   (if_clause <?> "if clause")
-   (while <?> "while loop")
+   (scope <?> "scope") <|>
+   (if_clause <?> "if clause") <|>
+   (while <?> "while loop") <|>
    (literal <?> "literal")
 
 opToString :: Operator -> String
@@ -148,25 +152,29 @@ statement =
 block :: Parser Block
 block = do
   symbol "{"
-  stmts <- some $ try statement
-  -- error . show $ stmts
-  end <- expr
+  stmts <- some $ statement
+  end <- optional expr
   symbol "}"
-  return $ Block stmts end
+  let (realStmts, realEnd) = case end of
+                               Just term -> (stmts, fromJust end)
+                               Nothing -> case stmts of
+                                            -- TODO: Handle the error properly.
+                                            [] -> error "Found an empty block"
+                                            _  -> (init stmts, Stmt $ last stmts)
+  return $ Block realStmts realEnd
 
--- TODO:
--- Handle the error properly.
+-- TODO: Handle the error properly.
 toBlock :: String -> Block
 toBlock str = unwrap $ parse block "" str
  where
    unwrap (Left err) = error $ show err
    unwrap (Right term) = term
 
-block :: Block
-block = toBlock "{ let mut a = while 0 { foo(b, 1 + 1) }; 6 + 3 * 5 }"
+block' :: Block
+block' = toBlock "{ let mut a = while 0 { foo(b, 1 + 1) }; 6 + 3 * 5 }"
 
 getTree :: IO (Ptr ())
 getTree = do
-  ptr <- newStablePtr block
+  ptr <- newStablePtr block'
   return $ castStablePtrToPtr ptr
 foreign export ccall getTree :: IO (Ptr ())
