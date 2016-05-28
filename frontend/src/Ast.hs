@@ -4,8 +4,6 @@ module Ast ( Operator(..)
            , Statement(..)
            , Block(..)
            ) where
-import Foreign.Ptr
-import Foreign.StablePtr
 
 data Operator = Add | Sub | Mul | Div deriving (Show, Eq)
 data Term = Literal Integer
@@ -15,6 +13,7 @@ data Term = Literal Integer
           | Scope Block
           | If Term Term Term
           | While Term Block
+          | Stmt Statement
           deriving (Show, Eq)
 data FunctionCall = FunctionCall { name :: String
                                  , arity :: Int
