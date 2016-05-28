@@ -144,9 +144,9 @@ extern_stmt = do
 statement :: Parser Statement
 statement =
   try letMut <|>
+  extern_stmt <|>
+  letBinding <|>
   try mutate <|>
-  try extern_stmt <|>
-  try letBinding <|>
   try termSemicolon <?> "statement"
 
 block :: Parser Block
