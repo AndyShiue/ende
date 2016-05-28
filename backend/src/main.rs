@@ -20,8 +20,8 @@ pub fn main() {
     use ende::ast::Operator::*;
     use ende::ast::Term::*;
     use ende::ast::Statement::*;
-    use ende::compile::*;
-
+    use ende::codegen::*;
+    use ende::trans::*;
     let stmt = LetMut("count", Literal(10));
     let cond_block = Block { stmts: &[Mutate("count", infix!(Var("count"), Sub, Literal(1)))],  end: Box::new(Var("count")) };
     let cond_term = Scope(cond_block);
@@ -32,7 +32,8 @@ pub fn main() {
 
     unsafe {
         haskell_init();
-        let tree_prim = ende::Ast::getTree();
+        let tree_prim = ende::Parsing::getTree();
+        println!("{:?}", to_rust_block(tree_prim));
         println!("{:?}", stmt.clone().gen_module());
 
         let module = stmt.gen_module().ok().unwrap();

@@ -7,7 +7,7 @@ import Foreign.StablePtr
 
 import Data.Maybe
 import Control.Monad (void)
-
+import Control.DeepSeq (($!!))
 import Text.Megaparsec hiding (space)
 import Text.Megaparsec.String
 import qualified Text.Megaparsec.Expr as Expr
@@ -70,12 +70,12 @@ while = do
 
 term :: Parser Term
 term =
+   (try if_clause <?> "if clause") <|>
+   (try while <?> "while loop") <|>
    (try functionCall <?> "function call") <|>
    (try var <?> "variable") <|>
-   (scope <?> "scope") <|>
-   (if_clause <?> "if clause") <|>
-   (while <?> "while loop") <|>
-   (literal <?> "literal")
+   (try literal <?> "literal") <|>
+   (try scope <?> "scope")
 
 opToString :: Operator -> String
 opToString Add = "+"
@@ -144,22 +144,22 @@ extern_stmt = do
 statement :: Parser Statement
 statement =
   try letMut <|>
-  try mutate <|>
   extern_stmt <|>
   letBinding <|>
-  termSemicolon <?> "statement"
+  try mutate <|>
+  try termSemicolon <?> "statement"
 
 block :: Parser Block
 block = do
   symbol "{"
-  stmts <- some $ statement
+  stmts <- many statement
   end <- optional expr
   symbol "}"
   let (realStmts, realEnd) = case end of
                                Just term -> (stmts, fromJust end)
                                Nothing -> case stmts of
                                             -- TODO: Handle the error properly.
-                                            [] -> error "Found an empty block"
+                                            [] -> error "No statement"
                                             _  -> (init stmts, Stmt $ last stmts)
   return $ Block realStmts realEnd
 
@@ -173,8 +173,7 @@ toBlock str = unwrap $ parse block "" str
 block' :: Block
 block' = toBlock "{ let mut a = while 0 { foo(b, 1 + 1) }; 6 + 3 * 5 }"
 
-getTree :: IO (Ptr ())
-getTree = do
-  ptr <- newStablePtr block'
-  return $ castStablePtrToPtr ptr
-foreign export ccall getTree :: IO (Ptr ())
+getTree :: IO (StablePtr Block)
+getTree = newStablePtr $!! block'
+
+foreign export ccall getTree :: IO (StablePtr Block)

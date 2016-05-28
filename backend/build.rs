@@ -44,6 +44,7 @@ fn main() {
 
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     println!("cargo:rustc-flags=-L {}/../frontend", manifest_dir);
-    println!("cargo:rustc-link-lib=static=Ast");
+    println!("cargo:rustc-link-lib=static=Parsing");
+    println!("cargo:rustc-link-lib=static=HsClosureFunc");
 //    panic!("sf");
 }
