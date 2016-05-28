@@ -7,7 +7,7 @@ import Foreign.StablePtr
 
 import Data.Maybe
 import Control.Monad (void)
-
+import Control.DeepSeq (($!!))
 import Text.Megaparsec hiding (space)
 import Text.Megaparsec.String
 import qualified Text.Megaparsec.Expr as Expr
@@ -173,8 +173,7 @@ toBlock str = unwrap $ parse block "" str
 block' :: Block
 block' = toBlock "{ let mut a = while 0 { foo(b, 1 + 1) }; 6 + 3 * 5 }"
 
-getTree :: IO (Ptr ())
-getTree = do
-  ptr <- newStablePtr block'
-  return $ castStablePtrToPtr ptr
-foreign export ccall getTree :: IO (Ptr ())
+getTree :: IO (StablePtr Block)
+getTree = newStablePtr $!! block'
+
+foreign export ccall getTree :: IO (StablePtr Block)
