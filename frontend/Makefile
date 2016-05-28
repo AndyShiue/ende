@@ -3,6 +3,7 @@ all:
 	stack build 2> log || (cat log && false)
 	./get_args.sh
 	stack exec ghc -- src/Ast.hs && ar rcs libAst.a src/Ast.o
+	./compile_closure_func.sh
 	./bind.sh
 clean:
 	stack clean
