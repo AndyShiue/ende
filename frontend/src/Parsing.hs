@@ -72,10 +72,10 @@ term :: Parser Term
 term =
    (try functionCall <?> "function call") <|>
    (try var <?> "variable") <|>
+   (try literal <?> "literal") <|>
    (scope <?> "scope") <|>
    (if_clause <?> "if clause") <|>
-   (while <?> "while loop") <|>
-   (literal <?> "literal")
+   (while <?> "while loop")
 
 opToString :: Operator -> String
 opToString Add = "+"
