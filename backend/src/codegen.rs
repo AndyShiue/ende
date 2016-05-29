@@ -190,16 +190,17 @@ impl<'a> Compile<'a> for Term<'a> {
                         if expected_arity != actual_arity as u32 {
                             let expected_arity_str = &*expected_arity.to_string();
                             let actual_arity_str = &*expected_arity.to_string();
-                            return Err(vec![
-                                String::from("function ") + name + " expect " + expected_arity_str
-                                + " parameters, but " + actual_arity_str +
-                                " parameters are provided."
-                            ]);
+                            let error_message = format!(
+                                "Function {} expect {} parameters,\
+                                 but {} parameters are provided.",
+                                name, expected_arity_str, actual_arity_str
+                            );
+                            return Err(vec![error_message]);
                         }
                         env_data.llvm_value
                     } else {
                         return Err(
-                            vec![String::from("Function ") + name + " hasn't been declared yet."]
+                            vec![format!("Function {} hasn't been declared yet.", name)]
                         );
                     };
 
@@ -258,7 +259,7 @@ impl<'a> Compile<'a> for Term<'a> {
                             }
                         }
                         None =>
-                            Err(vec![String::from("Variable ") + str + " isn't declared yet."]),
+                            Err(vec![format!("Variable {} isn't declared yet.", str)]),
                     }
                 }
                 Scope(ref block) => {
@@ -505,7 +506,7 @@ impl<'a> Compile<'a> for Block<'a> {
                         let var_result = match env.get(lhs) {
                             Some(var) => Ok(var.clone()),
                             None => Err(
-                                vec![String::from("Variable ") + lhs + " isn't declared yet."]
+                                vec![format!("Variable {} isn't declared yet.", lhs)]
                             ),
                         };
                         let built_rhs = try!(rhs.build(module, func, entry, builder, *env.clone()));
@@ -513,8 +514,9 @@ impl<'a> Compile<'a> for Block<'a> {
                         match env_data.direction {
                             Indirect => { LLVMBuildStore(builder, built_rhs, env_data.llvm_value); }
                             Direct =>
-                                return Err(vec![String::from("Variable ") +
-                                                lhs + " is immutable, so it cannot be mutated."]),
+                                return Err(vec![format!(
+                                    "Variable {} is immutable, so it cannot be mutated.", lhs
+                                )]),
                         }
                     }
                     Extern(name, arity) => {
