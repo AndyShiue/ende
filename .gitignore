@@ -15,6 +15,14 @@ frontend/rts.rs
 frontend/dist/*
 frontend/src/Ast.o
 frontend/src/Ast_stub.h
+frontend/Parsing.rs
+frontend/hs_closure_func.o
+frontend/hs_closure_func.rs
+frontend/libHsClosureFunc.a
+frontend/libParsing.a
+frontend/src/Parsing.hi
+frontend/src/Parsing.o
+frontend/src/Parsing_stub.h
 rust-bindgen
 rust-bindgen/*
 backend/target/*
