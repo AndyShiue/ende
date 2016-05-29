@@ -64,7 +64,7 @@ fn haskell_repr_substructure(cx: &mut ExtCtxt, trait_span: Span, substr: &Substr
 
     let fields = match *substr.fields {
         Struct(_, ref fs) | EnumMatching(_, _, ref fs) => fs,
-        _ => cx.span_bug(trait_span, "impossible substructure in `jstraceable`")
+        _ => cx.span_bug(trait_span, "impossible substructure in `from_haskell_repr`")
     };
 
     for &FieldInfo { ref self_, span, .. } in fields {
