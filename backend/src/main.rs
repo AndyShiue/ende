@@ -33,7 +33,7 @@ pub fn main() {
     unsafe {
         haskell_init();
         let tree_prim = ende::Parsing::getTree();
-        println!("{:?}", to_rust_block(tree_prim));
+        println!("{:?}", to_rust_block(ende::HsClosureFunc::_deRefStablePtr(tree_prim) as *mut ende::HsClosureFunc::StgClosure));
         println!("{:?}", stmt.clone().gen_module());
 
         let module = stmt.gen_module().ok().unwrap();
