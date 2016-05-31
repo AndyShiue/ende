@@ -24,8 +24,12 @@ data Statement = TermSemicolon Term
                | Let String Term
                | LetMut String Term
                | Mutate String Term
-               | Extern String Int
+               | Extern String Type
                deriving (Show, Eq, Generic, NFData)
+data Type = Forbidden
+          | I32Ty
+          | FunctionTy [Type] Type
+          deriving (Show, Eq, Generic, NFData)
 data Block = Block { stmts :: [Statement]
                    , end :: Term
                    } deriving (Show, Eq, Generic, NFData)

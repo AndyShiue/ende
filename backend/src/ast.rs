@@ -61,7 +61,7 @@ pub enum Statement {
     Let(String, Term),
     LetMut(String, Term),
     Mutate(String, Term),
-    Extern(String, Vec<Type>, Type),
+    Extern(String, Type),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
