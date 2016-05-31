@@ -22,3 +22,9 @@ StgHalfWord _GET_TAG(StgClosure* con) {
 StgWord _GET_CLOSURE_TAG(StgClosure* stgClosure) {
   return GET_CLOSURE_TAG(stgClosure);
 }
+rtsBool _LOOKS_LIKE_CLOSURE_PTR(const void* p) {
+  return LOOKS_LIKE_CLOSURE_PTR(p);
+}
+StgClosure* get_nth_payload(StgClosure* stgClosure, StgWord n) {
+  return stgClosure->payload[n];
+}
