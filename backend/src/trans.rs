@@ -6,7 +6,7 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
 use std::str::from_utf8;
 
-pub fn to_rust_block<'a>(i : *mut StgClosure) -> Block<'a> {
+pub fn to_rust_block(i : *mut StgClosure) -> Block {
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let input = *input_ref;
@@ -34,7 +34,7 @@ fn to_rust_operator(i : *mut StgClosure) -> Operator {
         }
     }
 }
-fn to_rust_term<'a>(i : *mut StgClosure) -> Term<'a> {
+fn to_rust_term(i : *mut StgClosure) -> Term {
     use ast::Term::*;
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
@@ -53,20 +53,20 @@ fn to_rust_term<'a>(i : *mut StgClosure) -> Term<'a> {
         
     }
 }
-fn to_rust_i32<'a>(i : *mut StgClosure) -> i32 {
+fn to_rust_i32(i : *mut StgClosure) -> i32 {
     unsafe {
         let input = *_UNTAG_CLOSURE(deRefStgInd(i));
     }
     unimplemented!()
 }
-fn to_rust_str<'a>(i : *mut StgClosure) -> &'a str {
+fn to_rust_str(i : *mut StgClosure) -> String {
     unimplemented!()
 }
-fn to_rust_terms<'a>(i : *mut StgClosure) -> &'a [Term<'a>] {
+fn to_rust_terms(i : *mut StgClosure) -> Vec<Term> {
 
     unimplemented!()
 }
-fn to_rust_statements<'a>(i : *mut StgClosure) -> &'a [Statement<'a>] {
+fn to_rust_statements(i : *mut StgClosure) -> [Statement] {
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let input = *input_ref;
@@ -87,14 +87,14 @@ fn to_rust_statements<'a>(i : *mut StgClosure) -> &'a [Statement<'a>] {
                 }
             }
         };
-        &*go(input_ref, Vec::<Statement>::new())
+        go(input_ref, Vec::<Statement>::new())
     }
 }
-fn to_rust_statement<'a>(i : *mut StgClosure) -> Statement<'a> {
+fn to_rust_statement(i : *mut StgClosure) -> Statement {
 
     unimplemented!()
 }
-fn to_rust_function_call<'a>(i : *mut StgClosure) -> FunctionCall<'a> {
+fn to_rust_function_call(i : *mut StgClosure) -> FunctionCall {
     unimplemented!()
 }
 

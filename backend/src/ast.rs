@@ -7,20 +7,20 @@ pub enum Operator {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FunctionCall<'a> {
-    pub name: &'a str,
+pub struct FunctionCall {
+    pub name: String,
     pub arity: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Term<'a> {
+pub enum Term {
     Literal(i32),
-    Var(&'a str),
-    Infix(Box<Term<'a>>, Operator, Box<Term<'a>>),
-    Call(FunctionCall<'a>, &'a [Term<'a>]),
-    Scope(Block<'a>),
-    If(Box<Term<'a>>, Box<Term<'a>>, Box<Term<'a>>),
-    While(Box<Term<'a>>, Block<'a>),
+    Var(String),
+    Infix(Box<Term>, Operator, Box<Term>),
+    Call(FunctionCall, Vec<Term>),
+    Scope(Block),
+    If(Box<Term>, Box<Term>, Box<Term>),
+    While(Box<Term>, Block),
 }
 
 #[macro_export]
@@ -33,16 +33,16 @@ macro_rules! infix {
 // I used to want to provide more useful macros, but I encountered wierd bugs and finally gave up.
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Statement<'a> {
-    TermSemicolon(Term<'a>),
-    Let(&'a str, Term<'a>),
-    LetMut(&'a str, Term<'a>),
-    Mutate(&'a str, Term<'a>),
-    Extern(&'a str, u32),
+pub enum Statement {
+    TermSemicolon(Term),
+    Let(String, Term),
+    LetMut(String, Term),
+    Mutate(String, Term),
+    Extern(String, u32),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Block<'a> {
-    pub stmts: &'a [Statement<'a>],
-    pub end: Box<Term<'a>>,
+pub struct Block {
+    pub stmts: Vec<Statement>,
+    pub end: Box<Term>,
 }
