@@ -3,6 +3,7 @@ module Ast ( Operator(..)
            , Term(..)
            , FunctionCall(..)
            , Statement(..)
+           , Type(..)
            , Block(..)
            ) where
 import Control.DeepSeq

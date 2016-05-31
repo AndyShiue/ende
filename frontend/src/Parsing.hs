@@ -134,12 +134,22 @@ mutate = do
   semicolon
   return $ Mutate var rhs
 
+-- TODO: This is a stub. Fix it.
+ty :: Parser Type
+ty = do
+  symbol "("
+  types <- symbol "I32" `sepEndBy` symbol ","
+  symbol ")"
+  symbol "->"
+  symbol "I32"
+  return $ FunctionTy (replicate (length types) I32Ty) I32Ty
+
 extern_stmt :: Parser Statement
 extern_stmt = do
   symbol "extern" <?> "extern"
   fn <- lexeme (some letterChar) <?> "extern function name"
-  arity <- read <$> (lexeme $ someTill digitChar space)
-  return $ Extern fn arity
+  args_ty <- ty
+  return $ Extern fn args_ty
 
 statement :: Parser Statement
 statement =
