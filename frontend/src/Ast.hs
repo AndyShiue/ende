@@ -8,7 +8,7 @@ module Ast ( Operator(..)
 import Control.DeepSeq
 import GHC.Generics
 data Operator = Add | Sub | Mul | Div deriving (Show, Eq, Generic, NFData)
-data Term = Literal Integer
+data Term = Literal Int
           | Var String
           | Infix Term Operator Term
           | Call FunctionCall [Term]
