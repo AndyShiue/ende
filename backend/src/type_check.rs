@@ -123,10 +123,8 @@ impl WithTag<Type> for Term {
                 None => Err(vec![format!("Undeclared variable {}.", str.clone())]),
             },
             Term::Infix(ref left, ref op, ref right) => {
-                let cloned_left = left.clone();
-                let cloned_right = right.clone();
-                let tagged_left = try!(cloned_left.tag(env.clone()));
-                let tagged_right = try!(cloned_right.tag(env));
+                let tagged_left = try!(left.tag(env.clone()));
+                let tagged_right = try!(right.tag(env));
                 let left_ty = tagged_left.get_tag();
                 let right_ty = tagged_right.get_tag();
                 if left_ty == I32Ty && right_ty == I32Ty {
@@ -192,6 +190,28 @@ impl WithTag<Type> for Term {
                 let ty = tagged_block.get_tag();
                 Ok(TaggedTerm::Scope(ty, tagged_block))
             }
+            Term::If(ref if_clause, ref then_clause, ref else_clause) => {
+                let tagged_if = try!(if_clause.tag(env.clone()));
+                let tagged_then = try!(then_clause.tag(env.clone()));
+                let tagged_else = try!(else_clause.tag(env));
+                let then_ty = tagged_then.get_tag();
+                let else_ty = tagged_else.get_tag();
+                if then_ty == else_ty {
+                    Ok(TaggedTerm::If(
+                        then_ty, Box::new(tagged_if), Box::new(tagged_then), Box::new(tagged_else)
+                    ))
+                } else {
+                    Err(
+                        vec![
+                            format!(
+                                "The term of the then part has type {}, \
+                                 but that of the else part has type {}.",
+                                then_ty, else_ty
+                            )
+                        ]
+                    )
+                }
+            }
             _ => unimplemented!()
         }
     }
@@ -245,7 +265,7 @@ pub enum TaggedStatement<Tag> {
     Let(Tag, String, TaggedTerm<Tag>),
     LetMut(Tag, String, TaggedTerm<Tag>),
     Mutate(Tag, String, TaggedTerm<Tag>),
-    Extern(Tag, String, Vec<Type>, Type),
+    Extern(Tag, String, Type),
 }
 
 impl WithTag<Type> for Statement {
@@ -274,12 +294,10 @@ impl WithTag<Type> for Statement {
                 let tagged_term = try!(term.tag(env.clone()));
                 Ok(TaggedStatement::Mutate(Forbidden, name.clone(), tagged_term))
             }
-            Statement::Extern(ref name, ref args_types, ref ret_type) => {
-                env.insert(name.clone(),
-                           FunctionTy(args_types.clone(), Box::new(ret_type.clone()))
-                          );
+            Statement::Extern(ref name, ref ty) => {
+                env.insert(name.clone(), ty.clone());
                 Ok(TaggedStatement::Extern(
-                    Forbidden, name.clone(), args_types.clone(), ret_type.clone()
+                    Forbidden, name.clone(), ty.clone()
                 ))
             }
         }

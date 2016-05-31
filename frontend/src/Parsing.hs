@@ -141,6 +141,7 @@ ty = do
   symbol ")"
   symbol "->"
   symbol "I32"
+  symbol ";"
   return $ FunctionTy (replicate (length types) I32Ty) I32Ty
 
 extern_stmt :: Parser Statement
@@ -180,7 +181,7 @@ toBlock str = unwrap $ parse block "" str
    unwrap (Right term) = term
 
 block' :: Block
-block' = toBlock "{ let mut a = while 0 { foo(b, 1 + 1) }; 6 + 3 * 5 }"
+block' = toBlock "{ extern print(I32) -> I32; let mut countdown = 9; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 }"
 
 getTree :: IO (StablePtr Block)
 getTree = newStablePtr $!! block'

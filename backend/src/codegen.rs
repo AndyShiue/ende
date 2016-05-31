@@ -74,7 +74,7 @@ impl Statement {
             Let(_, ref rhs) => rhs.rhs_vars(),
             LetMut(_, ref rhs) => rhs.rhs_vars(),
             Mutate(_, ref rhs) => rhs.rhs_vars(),
-            Extern(_, _, _) => HashSet::new(),
+            Extern(_, _) => HashSet::new(),
         }
     }
 }
@@ -545,11 +545,8 @@ impl Compile for Block {
                                 ),
                         }
                     }
-                    Extern(ref name, ref args_types, ref ret_type) => {
-                        let func_ty =
-                            LLVMTypeRef::from(
-                                &FunctionTy(args_types.clone(), Box::new(ret_type.clone()))
-                            );
+                    Extern(ref name, ref ty) => {
+                        let func_ty = LLVMTypeRef::from(ty);
                         let func = LLVMAddFunction(
                             module,
                             // Actually unnessasary clone.
@@ -559,7 +556,7 @@ impl Compile for Block {
                         let env_data = EnvData {
                             llvm_value: func,
                             direction: Direct,
-                            ty: FunctionTy(args_types.clone(), Box::new(ret_type.clone())),
+                            ty: ty.clone(),
                         };
                         env.insert(name.clone(), env_data);
                     }
