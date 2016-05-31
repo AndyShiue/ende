@@ -1,4 +1,6 @@
 use HsClosureFunc::*;
+
+use Rts;
 use ast::*;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
@@ -8,23 +10,26 @@ pub fn to_rust_block<'a>(i : *mut StgClosure) -> Block<'a> {
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let input = *input_ref;
-        println!("{}", get_constructor_name(input_ref));
-        println!("{:?}", _LOOKS_LIKE_CLOSURE_PTR(*input.payload as *const c_void) as u64);
+        println!("{}", get_constructor_desc(input_ref));
+        let zeroth = deRefStgInd(get_nth_payload(input_ref, 0));
+        let first = deRefStgInd(get_nth_payload(input_ref, 1));
+        println!("{}", get_constructor_desc(zeroth));
+        println!("{}", get_constructor_desc(first));
         Block {
-            stmts : to_rust_statements(*input.payload),
-            end : Box::new(to_rust_term(*input.payload.offset(1)))
+            stmts : to_rust_statements(get_nth_payload(input_ref, 0)),
+            end : Box::new(to_rust_term(get_nth_payload(input_ref, 1)))
         }
     }
 }
 fn to_rust_operator(i : *mut StgClosure) -> Operator {
     unsafe {
         let input = _UNTAG_CLOSURE(deRefStgInd(i));
-        let name = get_constructor_name(input);
+        let name = get_constructor_desc(input);
         match name.as_str() {
-            "Add" => Operator::Add,
-            "Sub" => Operator::Sub,
-            "Mul" => Operator::Mul,
-            "Div" => Operator::Div,
+            "main:Ast.Add" => Operator::Add,
+            "main:Ast.Sub" => Operator::Sub,
+            "main:Ast.Mul" => Operator::Mul,
+            "main:Ast.Div" => Operator::Div,
             _ => panic!("to_rust_operator: unrecognized constructor name: {}", name)
         }
     }
@@ -34,15 +39,15 @@ fn to_rust_term<'a>(i : *mut StgClosure) -> Term<'a> {
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let input = *input_ref;
-        let con_name = get_constructor_name(input_ref);
+        let con_name = get_constructor_desc(input_ref);
         match con_name.as_str() {
-            "Literal" => Literal(to_rust_i32(*input.payload)),
-            "Var" => Var(to_rust_str(*input.payload)),
-            "Infix" => Infix(Box::new(to_rust_term(*input.payload)), to_rust_operator(*input.payload.offset(1)), Box::new(to_rust_term(*input.payload.offset(2)))),
-            "Call" => Call(to_rust_function_call(*input.payload), to_rust_terms(*input.payload.offset(1))),
-            "Scope" => Scope(to_rust_block(*input.payload)),
-            "If" => If(Box::new(to_rust_term(*input.payload)), Box::new(to_rust_term(*input.payload.offset(1))), Box::new(to_rust_term(*input.payload.offset(2)))),
-            "While" => While(Box::new(to_rust_term(*input.payload)), to_rust_block(*input.payload.offset(1))),
+            "Literal" => Literal(to_rust_i32(*input.payload.offset(1))),
+            "Var" => Var(to_rust_str(*input.payload.offset(1))),
+            "Infix" => Infix(Box::new(to_rust_term(*input.payload.offset(1))), to_rust_operator(*input.payload.offset(2)), Box::new(to_rust_term(*input.payload.offset(3)))),
+            "Call" => Call(to_rust_function_call(*input.payload.offset(1)), to_rust_terms(*input.payload.offset(2))),
+            "Scope" => Scope(to_rust_block(*input.payload.offset(1))),
+            "If" => If(Box::new(to_rust_term(*input.payload.offset(1))), Box::new(to_rust_term(*input.payload.offset(2))), Box::new(to_rust_term(*input.payload.offset(3)))),
+            "While" => While(Box::new(to_rust_term(*input.payload.offset(1))), to_rust_block(*input.payload.offset(2))),
             _ => panic!("to_rust_term: unrecognized constructor name: {}", con_name)
         }
         
@@ -65,10 +70,25 @@ fn to_rust_statements<'a>(i : *mut StgClosure) -> &'a [Statement<'a>] {
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let input = *input_ref;
-        let con_name = get_constructor_name(input_ref);
-        println!("con_name in statements: {}", con_name);
+
+        fn go(closure : *mut StgClosure, mut acc : Vec<Statement>) -> Vec<Statement> {
+            unsafe {
+                let con_name = get_constructor_desc(closure);
+                match con_name.as_str() {
+                    "ghc-prim:GHC.Types.:" => {
+                        let t1 = to_rust_statement(get_nth_payload(closure, 0));
+                        acc.push(t1);
+                        go(_UNTAG_CLOSURE(deRefStgInd(get_nth_payload(closure, 1))), acc)
+                    },
+                    "ghc-prim:GHC.Types.[]" => {
+                        acc
+                    },
+                    _ => panic!("to_rust_statements: unrecognized constructor name: {}", con_name)
+                }
+            }
+        };
+        &*go(input_ref, Vec::<Statement>::new())
     }
-    unimplemented!()
 }
 fn to_rust_statement<'a>(i : *mut StgClosure) -> Statement<'a> {
 
@@ -96,12 +116,4 @@ pub fn get_constructor_desc(i : *mut StgClosure) -> String {
     unsafe {
         return to_rust_string(_GET_CON_DESC(_get_con_itbl(_UNTAG_CLOSURE(i))));
     }
-}
-
-pub fn get_constructor_name(i : *mut StgClosure) -> String {
-    let input : *mut StgClosure;
-    unsafe { input = _UNTAG_CLOSURE(deRefStgInd(i)) }
-    let string = get_constructor_desc(i);
-    let mut splitted : Vec<&str> = string.split(':').collect();
-    splitted.pop().unwrap().to_string()
 }
