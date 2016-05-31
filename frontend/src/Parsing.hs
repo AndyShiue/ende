@@ -4,7 +4,8 @@ module Parsing
 
 import Foreign.Ptr
 import Foreign.StablePtr
-
+import Foreign.C.String
+    
 import Data.Maybe
 import Control.Monad (void)
 import Control.DeepSeq (($!!))
@@ -183,7 +184,9 @@ toBlock str = unwrap $ parse block "" str
 block' :: Block
 block' = toBlock "{ extern print(I32) -> I32; let mut countdown = 9; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 }"
 
-getTree :: IO (StablePtr Block)
-getTree = newStablePtr $!! block'
+getTree :: CString -> IO (StablePtr Block)
+getTree x = do
+  str <- peekCString x
+  newStablePtr $!! toBlock str
 
-foreign export ccall getTree :: IO (StablePtr Block)
+foreign export ccall getTree :: CString -> IO (StablePtr Block)
