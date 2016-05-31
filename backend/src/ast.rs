@@ -1,3 +1,8 @@
+use std::fmt::{Display, Formatter, Result};
+
+// Extern statements use `Type`.
+use type_check::Type;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Operator {
     Add,
@@ -6,10 +11,28 @@ pub enum Operator {
     Div,
 }
 
+impl Display for Operator {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        use self::Operator::*;
+        let op_str = match *self {
+            Add => "+",
+            Sub => "-",
+            Mul => "*",
+            Div => "/",
+        };
+        write!(f, "{}", op_str)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FunctionCall {
     pub name: String,
-    pub arity: u32,
+}
+
+impl Display for FunctionCall {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "{}", self.name)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -38,7 +61,7 @@ pub enum Statement {
     Let(String, Term),
     LetMut(String, Term),
     Mutate(String, Term),
-    Extern(String, u32),
+    Extern(String, Vec<Type>, Type),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -5,7 +5,8 @@ use llvm_sys::prelude::*;
 use llvm_sys::core::*;
 
 use ast::*;
-use self::Type::*;
+use type_check::*;
+use type_check::Type::*;
 
 trait ToRaw: Into<Vec<u8>> {
     fn to_raw(self) -> Result<*const c_char, Vec<String>>;
@@ -20,7 +21,7 @@ impl<'a> ToRaw for &'a str {
     }
 }
 
-pub type Map<'a, T> = HashMap<&'a str, T>;
+pub type Map<T> = HashMap<String, T>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Direction {
@@ -35,27 +36,21 @@ pub struct EnvData {
     ty: Type,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum Type {
-    Base,
-    Function(u32),
-}
-
-impl<'a> Term<'a> {
-    pub fn rhs_vars(self: &'a Term<'a>) -> HashSet<&'a str> {
+impl Term {
+    pub fn rhs_vars(self: &Term) -> HashSet<String> {
         use ast::Term::*;
         match *self {
             Literal(_) => HashSet::new(),
-            Var(name) => {
+            Var(ref name) => {
                 let mut set = HashSet::new();
-                set.insert(name);
+                set.insert(name.clone());
                 set
             }
             Infix(ref left, _, ref right) => left.rhs_vars()
                                                  .union(&right.rhs_vars())
                                                  .cloned()
                                                  .collect(),
-            Call(_, args) =>
+            Call(_, ref args) =>
                 args.iter()
                     .map(|arg| arg.rhs_vars())
                     .fold(HashSet::new(), |l, r| l.union(&r).cloned().collect()),
@@ -71,21 +66,21 @@ impl<'a> Term<'a> {
     }
 }
 
-impl<'a> Statement<'a> {
-    pub fn rhs_vars(self: &'a Statement<'a>,) -> HashSet<&str> {
+impl Statement {
+    pub fn rhs_vars(self: &Statement) -> HashSet<String> {
         use ast::Statement::*;
         match *self {
             TermSemicolon(ref term) => term.rhs_vars(),
             Let(_, ref rhs) => rhs.rhs_vars(),
             LetMut(_, ref rhs) => rhs.rhs_vars(),
             Mutate(_, ref rhs) => rhs.rhs_vars(),
-            Extern(_, _) => HashSet::new(),
+            Extern(_, _, _) => HashSet::new(),
         }
     }
 }
 
-impl<'a> Block<'a> {
-    pub fn rhs_vars(self: &'a Block<'a>) -> HashSet<&str> {
+impl Block {
+    pub fn rhs_vars(self: &Block) -> HashSet<String> {
         let stmts_rhs_vars = self.stmts
                                  .iter()
                                  .map(|stmt| stmt.rhs_vars())
@@ -94,23 +89,23 @@ impl<'a> Block<'a> {
     }
 }
 
-pub trait Compile<'a> {
+pub trait Compile {
 
     type Env;
 
     fn new_env() -> Self::Env;
 
-    fn build(self: &'a Self,
+    fn build(self: &Self,
                     module: LLVMModuleRef,
                     func: LLVMValueRef,
                     entry: LLVMBasicBlockRef,
                     builder: LLVMBuilderRef,
                     env: Self::Env) -> Result<LLVMValueRef, Vec<String>>;
 
-    fn init_module(self: &'a Self,
-                          module: LLVMModuleRef,
-                          func: LLVMValueRef,
-                          builder: LLVMBuilderRef) -> Result<(), Vec<String>> {
+    fn init_module(self: &Self,
+                   module: LLVMModuleRef,
+                   func: LLVMValueRef,
+                   builder: LLVMBuilderRef) -> Result<(), Vec<String>> {
         unsafe {
             let entry = LLVMAppendBasicBlock(func, "entry\0".as_ptr() as *const i8);
             LLVMPositionBuilderAtEnd(builder, entry);
@@ -124,7 +119,7 @@ pub trait Compile<'a> {
         }
     }
 
-    fn gen_module(self: &'a Self) -> Result<LLVMModuleRef, Vec<String>> {
+    fn gen_module(self: &Self) -> Result<LLVMModuleRef, Vec<String>> {
         unsafe {
             let name = try!("Main".to_raw());
             let module = LLVMModuleCreateWithName(name);
@@ -139,13 +134,13 @@ pub trait Compile<'a> {
 
 }
 
-impl<'a> Compile<'a> for Term<'a> {
+impl Compile for Term {
 
-    type Env = Map<'a, EnvData>;
+    type Env = Map<EnvData>;
 
     fn new_env() -> Self::Env { Map::new() }
 
-    fn build(self: &'a Term<'a>,
+    fn build(self: &Term,
              module: LLVMModuleRef,
              func: LLVMValueRef,
              entry: LLVMBasicBlockRef,
@@ -156,6 +151,21 @@ impl<'a> Compile<'a> for Term<'a> {
             // Build the instructions.
             match *self {
                 Literal(i) => Ok(LLVMConstInt(LLVMIntType(32), i as u64, 0)),
+                Var(ref str) => {
+                    match env.get(str) {
+                        Some(pair) => {
+                            use self::Direction::*;
+                            match pair.direction {
+                                Indirect => Ok(LLVMBuildLoad(
+                                    builder, pair.llvm_value, try!("load".to_raw())
+                                )),
+                                Direct => Ok(pair.llvm_value),
+                            }
+                        }
+                        None =>
+                            Err(vec![format!("Variable {} isn't declared yet.", str)]),
+                    }
+                }
                 Infix(ref left, ref op, ref right) => {
                     use ast::Operator::*;
                     let another_env = env.clone();
@@ -178,20 +188,20 @@ impl<'a> Compile<'a> for Term<'a> {
                 }
                 Call(ref func_call, ref args) => {
 
-                    let name = func_call.name;
-                    let llvm_func = if let Some(env_data) = env.get(&name) {
+                    let ref name = func_call.name;
+                    let llvm_func = if let Some(env_data) = env.get(name) {
                         let expected_arity;
-                        if let Function(arity) = env_data.ty {
-                            expected_arity = arity;
+                        if let FunctionTy(ref args_types, _) = env_data.ty {
+                            expected_arity = args_types.len();
                         } else {
                             unreachable!();
                         };
                         let actual_arity = (*args).len();
-                        if expected_arity != actual_arity as u32 {
+                        if expected_arity != actual_arity {
                             let expected_arity_str = &*expected_arity.to_string();
                             let actual_arity_str = &*expected_arity.to_string();
                             let error_message = format!(
-                                "Function {} expect {} parameters,\
+                                "Function {} expect {} parameters, \
                                  but {} parameters are provided.",
                                 name, expected_arity_str, actual_arity_str
                             );
@@ -238,29 +248,14 @@ impl<'a> Compile<'a> for Term<'a> {
                     // The above line makes the program segfault. Wierd.
                     let mut args: Vec<LLVMValueRef> = try!(result_args);
                     let raw_args = args.as_mut_ptr();
-                    let name = &*("call".to_string() + func_call.name);
+                    let name = &*("call".to_string() + &*func_call.name);
                     let value = LLVMBuildCall(builder,
                                               llvm_func,
                                               raw_args,
-                                              func_call.arity,
+                                              args.len() as u32,
                                               try!(name.to_raw())
                                              );
                     Ok(value)
-                }
-                Var(ref str) => {
-                    match env.get(str) {
-                        Some(pair) => {
-                            use self::Direction::*;
-                            match pair.direction {
-                                Indirect => Ok(LLVMBuildLoad(
-                                    builder, pair.llvm_value, try!("load".to_raw())
-                                )),
-                                Direct => Ok(pair.llvm_value),
-                            }
-                        }
-                        None =>
-                            Err(vec![format!("Variable {} isn't declared yet.", str)]),
-                    }
                 }
                 Scope(ref block) => {
                     let new_env = env.clone();
@@ -290,7 +285,7 @@ impl<'a> Compile<'a> for Term<'a> {
                     let mut new_env = env.clone();
                     // Build the phi nodes.
                     for (key, env_data) in &env {
-                        if cond.rhs_vars().contains(key) {
+                        if cond.rhs_vars().contains(&**key) {
                             match env_data.direction {
                                 Indirect => {
                                     let ty = LLVMPointerType(LLVMIntType(32), 0);
@@ -302,9 +297,9 @@ impl<'a> Compile<'a> for Term<'a> {
                                     let new_data = EnvData {
                                         llvm_value: phi,
                                         direction: Indirect,
-                                        ty: Base,
+                                        ty: I32Ty,
                                     };
-                                    new_env.insert(key, new_data);
+                                    new_env.insert(key.clone(), new_data);
                                 }
                                 Direct => {
                                     let name = try!((*key).to_raw());
@@ -320,9 +315,9 @@ impl<'a> Compile<'a> for Term<'a> {
                                     let new_data = EnvData {
                                         llvm_value: phi,
                                         direction: old_data.direction,
-                                        ty: Base,
+                                        ty: I32Ty,
                                     };
-                                    new_env.insert(key, new_data);
+                                    new_env.insert(key.clone(), new_data);
                                 }
                             }
                         }
@@ -335,7 +330,7 @@ impl<'a> Compile<'a> for Term<'a> {
                     LLVMPositionBuilderAtEnd(builder, else_branch);
                     let mut new_env = env.clone();
                     for (key, env_data) in &env {
-                        if cond.rhs_vars().contains(key) {
+                        if cond.rhs_vars().contains(&**key) {
                             match env_data.direction {
                                 Indirect => {
                                     let ty = LLVMPointerType(LLVMIntType(32), 0);
@@ -347,9 +342,9 @@ impl<'a> Compile<'a> for Term<'a> {
                                     let env_data = EnvData {
                                         llvm_value: phi,
                                         direction: Indirect,
-                                        ty: Base,
+                                        ty: I32Ty,
                                     };
-                                    new_env.insert(key, env_data);
+                                    new_env.insert(key.clone(), env_data);
                                 }
                                 Direct => {
                                     let name = try!((*key).to_raw());
@@ -365,9 +360,9 @@ impl<'a> Compile<'a> for Term<'a> {
                                     let new_data = EnvData {
                                         llvm_value: phi,
                                         direction: old_data.direction,
-                                        ty: Base,
+                                        ty: I32Ty,
                                     };
-                                    new_env.insert(key, new_data);
+                                    new_env.insert(key.clone(), new_data);
                                 }
                             }
                         }
@@ -388,8 +383,8 @@ impl<'a> Compile<'a> for Term<'a> {
                                     [then_val, else_val].as_mut_ptr(),
                                     [then_branch, else_branch].as_mut_ptr(),
                                     2);
-                    let env_data = EnvData { llvm_value: phi, direction: Direct, ty: Base };
-                    new_env.insert(if_str, env_data);
+                    let env_data = EnvData { llvm_value: phi, direction: Direct, ty: I32Ty };
+                    new_env.insert(if_str.to_string(), env_data);
                     Ok(phi)
                 }
                 While(ref cond, ref block) => {
@@ -412,7 +407,7 @@ impl<'a> Compile<'a> for Term<'a> {
                     let mut new_env = env.clone();
                     // Build the phi nodes.
                     for (key, pair) in &env {
-                        if cond.rhs_vars().contains(key) {
+                        if cond.rhs_vars().contains(&**key) {
                             use self::Direction::*;
                             match pair.direction {
                                 Indirect => {
@@ -426,9 +421,9 @@ impl<'a> Compile<'a> for Term<'a> {
                                     let env_data = EnvData {
                                         llvm_value: phi,
                                         direction: Indirect,
-                                        ty: Base,
+                                        ty: I32Ty,
                                     };
-                                    new_env.insert(key, env_data);
+                                    new_env.insert(key.clone(), env_data);
                                 }
                                 Direct => {
                                     let name = try!((*key).to_raw());
@@ -444,9 +439,9 @@ impl<'a> Compile<'a> for Term<'a> {
                                     let new_data = EnvData {
                                         llvm_value: phi,
                                         direction: old_data.direction,
-                                        ty: Base,
+                                        ty: I32Ty,
                                     };
-                                    new_env.insert(key, new_data);
+                                    new_env.insert(key.clone(), new_data);
                                 }
                             }
                         }
@@ -469,13 +464,34 @@ impl<'a> Compile<'a> for Term<'a> {
 
 }
 
-impl<'a> Compile<'a> for Block<'a> {
+impl<'a> From<&'a Type> for LLVMTypeRef {
+    fn from(ty: &Type) -> LLVMTypeRef {
+        unsafe {
+            match *ty {
+                Forbidden => unreachable!(),
+                I32Ty => LLVMInt32Type(),
+                Enum(ref en) => if en.name == "Unit" { LLVMVoidType() } else { unreachable!() },
+                FunctionTy(ref args_types, ref ret_type) => {
+                    let args_llvm_types: Vec<LLVMTypeRef> =
+                        args_types.iter().map(|ty| LLVMTypeRef::from(&*ty)).collect();
+                    LLVMFunctionType(LLVMTypeRef::from(&**ret_type),
+                                     (args_llvm_types.clone()).as_mut_ptr(),
+                                     args_types.len() as u32,
+                                     0
+                                    )
+                }
+            }
+        }
+    }
+}
 
-    type Env = Box<Map<'a, EnvData>>;
+impl Compile for Block {
+
+    type Env = Box<Map<EnvData>>;
 
     fn new_env() ->  Self::Env { Box::new(Map::new()) }
 
-    fn build(self: &'a Block<'a>,
+    fn build(self: &Block,
              module: LLVMModuleRef,
              func: LLVMValueRef,
              entry: LLVMBasicBlockRef,
@@ -484,23 +500,25 @@ impl<'a> Compile<'a> for Block<'a> {
         use self::Direction::*;
         use ast::Statement::*;
         unsafe {
-            for stmt in self.stmts {
+            for stmt in &self.stmts {
                 match *stmt {
                     TermSemicolon(ref term) => {
                         try!(term.build(module, func, entry, builder, *env.clone()));
                     }
                     Let(ref lhs, ref rhs) => {
                         let value = try!(rhs.build(module, func, entry, builder, *env.clone()));
-                        let env_data = EnvData { llvm_value: value, direction: Direct, ty: Base };
-                        env.insert(lhs, env_data);
+                        let env_data = EnvData { llvm_value: value, direction: Direct, ty: I32Ty };
+                        env.insert(lhs.clone(), env_data);
                     }
                     LetMut(ref lhs, ref rhs) => {
                         let alloca =
                             LLVMBuildAlloca(builder, LLVMInt32Type(), lhs.as_ptr() as *const i8);
-                        let built_rhs = try!(rhs.build(module, func, entry, builder, *env.clone()));
+                        let built_rhs =
+                            try!(rhs.build(module, func, entry, builder, *env.clone()));
                         LLVMBuildStore(builder, built_rhs, alloca);
-                        let env_data = EnvData { llvm_value: alloca, direction: Indirect, ty: Base };
-                        env.insert(lhs, env_data);
+                        let env_data =
+                            EnvData { llvm_value: alloca, direction: Indirect, ty: I32Ty };
+                        env.insert(lhs.clone(), env_data);
                     }
                     Mutate(ref lhs, ref rhs) => {
                         let var_result = match env.get(lhs) {
@@ -509,30 +527,41 @@ impl<'a> Compile<'a> for Block<'a> {
                                 vec![format!("Variable {} isn't declared yet.", lhs)]
                             ),
                         };
-                        let built_rhs = try!(rhs.build(module, func, entry, builder, *env.clone()));
+                        let built_rhs =
+                            try!(rhs.build(module, func, entry, builder, *env.clone()));
                         let env_data = try!(var_result);
                         match env_data.direction {
-                            Indirect => { LLVMBuildStore(builder, built_rhs, env_data.llvm_value); }
+                            Indirect => {
+                                LLVMBuildStore(builder, built_rhs, env_data.llvm_value);
+                            }
                             Direct =>
-                                return Err(vec![format!(
-                                    "Variable {} is immutable, so it cannot be mutated.", lhs
-                                )]),
+                                return Err(
+                                    vec![
+                                        format!(
+                                            "Variable {} is immutable, so it cannot be mutated.",
+                                            lhs
+                                        )
+                                    ]
+                                ),
                         }
                     }
-                    Extern(name, arity) => {
-                        let ret_ty = LLVMInt32Type();
-                        let args_ty = (&mut *vec![LLVMInt32Type(); arity as usize]).as_mut_ptr();
-                        let func_ty = LLVMFunctionType(ret_ty, args_ty, arity, 0);
+                    Extern(ref name, ref args_types, ref ret_type) => {
+                        let func_ty =
+                            LLVMTypeRef::from(
+                                &FunctionTy(args_types.clone(), Box::new(ret_type.clone()))
+                            );
                         let func = LLVMAddFunction(
+                            module,
                             // Actually unnessasary clone.
-                            module, try!(name.to_raw().map_err(|err| vec![err[0].clone()])), func_ty
+                            try!(name.to_raw().map_err(|err| vec![err[0].clone()])),
+                            func_ty
                         );
                         let env_data = EnvData {
                             llvm_value: func,
                             direction: Direct,
-                            ty: Function(arity)
+                            ty: FunctionTy(args_types.clone(), Box::new(ret_type.clone())),
                         };
-                        env.insert(name, env_data);
+                        env.insert(name.clone(), env_data);
                     }
                 }
             }
