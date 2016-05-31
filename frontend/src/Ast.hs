@@ -19,7 +19,6 @@ data Term = Literal Int
           | Stmt Statement
           deriving (Show, Eq, Generic, NFData)
 data FunctionCall = FunctionCall { name :: String
-                                 , arity :: Int
                                  } deriving (Show, Eq, Generic, NFData)
 data Statement = TermSemicolon Term
                | Let String Term

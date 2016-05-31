@@ -44,8 +44,7 @@ functionCall = do
     leftParen
     vars <- sepEndBy expr $ symbol ","
     rightParen
-    let arity = length vars
-    let funcCall = FunctionCall name arity
+    let funcCall = FunctionCall name
     return $ Call funcCall vars
 
 scope :: Parser Term

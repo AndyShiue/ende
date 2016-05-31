@@ -2,6 +2,7 @@ use HsClosureFunc::*;
 
 use Rts;
 use ast::*;
+use type_check::*;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
 use std::str::from_utf8;
@@ -85,7 +86,7 @@ fn to_rust_string(i : *mut StgClosure) -> String {
                     "ghc-prim:GHC.Types.[]" => {
                         acc
                     },
-                    _ => panic!("to_rust_terms: unrecognized constructor name: {}", con_name)
+                    _ => panic!("to_rust_string: unrecognized constructor name: {}", con_name)
                 }
             }
         };
@@ -105,6 +106,44 @@ fn to_rust_char(i : *mut StgClosure) -> char {
         }
     }
 }
+
+fn to_rust_type(i : *mut StgClosure) -> Type {
+    unsafe {
+        let input = _UNTAG_CLOSURE(deRefStgInd(i));
+        let name = get_constructor_desc(input);
+        use type_check::Type::*;
+        match name.as_str() {
+            "main:Ast.Forbidden" => Forbidden,
+            "main:Ast.I32Ty" => I32Ty,
+            "main:Ast.FunctionTy" => FunctionTy(to_rust_types(get_nth_payload(input, 0)), Box::new(to_rust_type(get_nth_payload(input, 1)))),
+            _ => panic!("to_rust_type: unrecognized constructor name: {}", name)
+        }
+    }
+}
+fn to_rust_types(i : *mut StgClosure) -> Vec<Type> {
+    unsafe {
+        let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
+
+        fn go(closure : *mut StgClosure, mut acc : Vec<Type>) -> Vec<Type> {
+            unsafe {
+                let con_name = get_constructor_desc(closure);
+                match con_name.as_str() {
+                    "ghc-prim:GHC.Types.:" => {
+                        let t1 = to_rust_type(get_nth_payload(closure, 0));
+                        acc.push(t1);
+                        go(_UNTAG_CLOSURE(deRefStgInd(get_nth_payload(closure, 1))), acc)
+                    },
+                    "ghc-prim:GHC.Types.[]" => {
+                        acc
+                    },
+                    _ => panic!("to_rust_types: unrecognized constructor name: {}", con_name)
+                }
+            }
+        };
+        go(input_ref, Vec::<Type>::new())
+    }
+}
+
 fn to_rust_terms(i : *mut StgClosure) -> Vec<Term> {
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
@@ -161,7 +200,7 @@ fn to_rust_statement(i : *mut StgClosure) -> Statement {
             "main:Ast.Let" => Let(to_rust_string(get_nth_payload(input_ref, 0)), to_rust_term(get_nth_payload(input_ref, 1))),
             "main:Ast.LetMut" => LetMut(to_rust_string(get_nth_payload(input_ref, 0)), to_rust_term(get_nth_payload(input_ref, 1))),
             "main:Ast.Mutate" => Mutate(to_rust_string(get_nth_payload(input_ref, 0)), to_rust_term(get_nth_payload(input_ref, 1))),
-            "main:Ast.Extern" => Extern(to_rust_string(get_nth_payload(input_ref, 0)), to_rust_u32(get_nth_payload(input_ref, 1))),
+            "main:Ast.Extern" => Extern(to_rust_string(get_nth_payload(input_ref, 0)), to_rust_type(get_nth_payload(input_ref, 1))),
             _ => panic!("to_rust_statement: unrecognized constructor name: {}", con_name)
         }
     }
@@ -170,8 +209,7 @@ fn to_rust_function_call(i : *mut StgClosure) -> FunctionCall {
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         FunctionCall {
-            name : to_rust_string(get_nth_payload(input_ref, 0)),
-            arity : to_rust_u32(get_nth_payload(input_ref, 1))
+            name : to_rust_string(get_nth_payload(input_ref, 0))
         }
     }
 }
