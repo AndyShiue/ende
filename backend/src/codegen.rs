@@ -85,7 +85,11 @@ impl Block {
                                  .iter()
                                  .map(|stmt| stmt.rhs_vars())
                                  .fold(HashSet::new(), |l, r| l.union(&r).cloned().collect());
-        stmts_rhs_vars.union(&self.end.rhs_vars()).cloned().collect()
+        let end_vars = match *self.end {
+            Some(ref term) => term.rhs_vars(),
+            None => HashSet::new(),
+        };
+        stmts_rhs_vars.union(&end_vars).cloned().collect()
     }
 }
 
@@ -562,7 +566,13 @@ impl Compile for Block {
                     }
                 }
             }
-            self.end.build(module, func, entry, builder, *env)
+            if let Some(ref term) = *self.end {
+                term.build(module, func, entry, builder, *env)
+            } else {
+                use std::ptr::null;
+                use llvm_sys::LLVMValue;
+                Ok(null::<LLVMValue>() as *mut _)
+            }
         }
     }
 }

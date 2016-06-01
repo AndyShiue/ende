@@ -335,7 +335,7 @@ impl Tagged<Type> for TaggedStatement<Type> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TaggedBlock<Tag> {
     pub stmts: Vec<TaggedStatement<Tag>>,
-    pub end: Box<TaggedTerm<Tag>>,
+    pub end: Box<Option<TaggedTerm<Tag>>>,
 }
 
 impl WithTag<Type> for Block {
@@ -347,10 +347,14 @@ impl WithTag<Type> for Block {
             let tagged_stmt = try!(stmt.tag(env.clone()));
             tagged_stmts.push(tagged_stmt);
         }
+        let end = match *self.end {
+            Some(ref term) => Some(try!(term.tag(env))),
+            None => None
+        };
         Ok(
             TaggedBlock {
                 stmts: tagged_stmts,
-                end: Box::new(try!(self.end.tag(env))),
+                end: Box::new(end),
             }
         )
     }
@@ -359,12 +363,21 @@ impl WithTag<Type> for Block {
 impl Tagged<Type> for TaggedBlock<Type> {
     type Untagged = Block;
     fn get_tag(&self) -> Type {
-        self.end.get_tag()
+        match *self.end {
+            Some(ref term) => term.get_tag(),
+            None => {
+                let unit_enum = Enumeration {
+                    name: "Unit".to_string(),
+                    variants: vec!["unit".to_string()]
+                };
+                Type::Enum(unit_enum)
+            }
+        }
     }
     fn untag(&self) -> Block {
         Block {
             stmts: self.stmts.iter().map(TaggedStatement::untag).collect(),
-            end: Box::new(self.end.untag()),
+            end: Box::new(self.clone().end.map(|term| term.untag())),
         }
     }
 }
