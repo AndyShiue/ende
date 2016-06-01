@@ -5,6 +5,7 @@ module Ast ( Operator(..)
            , Statement(..)
            , Type(..)
            , Block(..)
+           , Program(..)
            ) where
 import Control.DeepSeq
 import GHC.Generics
@@ -31,5 +32,6 @@ data Type = Forbidden
           | FunctionTy [Type] Type
           deriving (Show, Eq, Generic, NFData)
 data Block = Block { stmts :: [Statement]
-                   , end :: Term
+                   , end :: Maybe Term
                    } deriving (Show, Eq, Generic, NFData)
+data Program = Program Block deriving (Show, Eq, Generic, NFData)

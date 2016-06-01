@@ -567,6 +567,22 @@ impl Compile for Block {
     }
 }
 
+impl Compile for Program {
+
+    type Env = Box<Map<EnvData>>;
+
+    fn new_env() ->  Self::Env { Box::new(Map::new()) }
+
+    fn build(self: &Program,
+             module: LLVMModuleRef,
+             func: LLVMValueRef,
+             entry: LLVMBasicBlockRef,
+             builder: LLVMBuilderRef,
+             env: Self::Env) -> Result<LLVMValueRef, Vec<String>> {
+        self.main.build(module, func, entry, builder, env)
+    }
+}
+
 // Doesn't work right now. Will try to fix.
 pub unsafe fn emit_obj(module: LLVMModuleRef) {
     use llvm_sys::target::*;

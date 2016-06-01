@@ -21,8 +21,8 @@ pub fn main() {
     unsafe {
         haskell_init();
         let tree_prim = ende::Parsing::getTree();
-        let block = to_rust_block(ende::HsClosureFunc::_deRefStablePtr(tree_prim) as *mut ende::HsClosureFunc::StgClosure);
-        let result = block.gen_module();
+        let program = to_rust_program(ende::HsClosureFunc::_deRefStablePtr(tree_prim) as *mut ende::HsClosureFunc::StgClosure);
+        let result = program.gen_module();
         println!("{:?}", result);
         let module = result.ok().unwrap();
         LLVMDumpModule(module.clone());

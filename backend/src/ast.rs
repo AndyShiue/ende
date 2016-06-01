@@ -67,5 +67,10 @@ pub enum Statement {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Block {
     pub stmts: Vec<Statement>,
-    pub end: Box<Term>,
+    pub end: Box<Option<Term>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Program {
+    pub main: Block,
 }

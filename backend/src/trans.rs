@@ -4,9 +4,16 @@ use Rts;
 use ast::*;
 use type_check::*;
 use std::ffi::CStr;
-use std::os::raw::{c_char, c_void};
 use std::str::from_utf8;
 
+pub fn to_rust_program(i : *mut StgClosure) -> Program {
+    unsafe {
+        let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
+        Program {
+            main : to_rust_block(get_nth_payload(input_ref, 0))
+        }
+    }
+}
 pub fn to_rust_block(i : *mut StgClosure) -> Block {
     unsafe {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
@@ -45,7 +52,7 @@ fn to_rust_term(i : *mut StgClosure) -> Term {
             "main:Ast.While" => While(Box::new(to_rust_term(get_nth_payload(input_ref, 0))), to_rust_block(get_nth_payload(input_ref, 1))),
             _ => panic!("to_rust_term: unrecognized constructor name: {}", con_name)
         }
-        
+
     }
 }
 

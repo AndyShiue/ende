@@ -163,20 +163,31 @@ block :: Parser Block
 block = do
   symbol "{" <?> "left curly brace"
   stmts <- many statement
-  end <- expr
+  end <- optional expr
   return $ Block stmts end
 
+program :: Parser Program
+program = do
+  symbol "fn" <?> "fn"
+  symbol "main" <?> "main"
+  leftParen
+  rightParen
+  symbol "->" <?> "arrow"
+  symbol "Unit" <?> "Unit"
+  b <- block
+  return $ Program b
+
 -- TODO: Handle the error properly.
-toBlock :: String -> Block
-toBlock str = unwrap $ parse block "" str
+toProgram :: String -> Program
+toProgram str = unwrap $ parse program "" str
  where
    unwrap (Left err) = error $ show err
    unwrap (Right term) = term
 
-block' :: Block
-block' = toBlock "{ extern print(I32) -> I32; let mut countdown = 100; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 }"
+program' :: Program
+program' = toProgram "fn main() -> Unit { extern print(I32) -> I32; let mut countdown = 100; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 }"
 
-getTree :: IO (StablePtr Block)
-getTree = newStablePtr $!! block'
+getTree :: IO (StablePtr Program)
+getTree = newStablePtr $!! program'
 
-foreign export ccall getTree :: IO (StablePtr Block)
+foreign export ccall getTree :: IO (StablePtr Program)

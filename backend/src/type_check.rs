@@ -308,10 +308,27 @@ impl WithTag<Type> for Statement {
 impl Tagged<Type> for TaggedStatement<Type> {
     type Untagged = Statement;
     fn get_tag(&self) -> Type {
-        unimplemented!()
+        use self::TaggedStatement::*;
+        match *self {
+            TermSemicolon(ref ty, _) => ty.clone(),
+            Let(ref ty, _, _) => ty.clone(),
+            LetMut(ref ty, _, _) => ty.clone(),
+            Mutate(ref ty, _, _) => ty.clone(),
+            Extern(ref ty, _, _) => ty.clone(),
+        }
     }
     fn untag(&self) -> Statement {
-        unimplemented!()
+        match *self {
+            TaggedStatement::TermSemicolon(_, ref term) => Statement::TermSemicolon(term.untag()),
+            TaggedStatement::Let(_, ref name, ref term) =>
+                Statement::Let(name.clone(), term.untag()),
+            TaggedStatement::LetMut(_, ref name, ref term) =>
+                Statement::LetMut(name.clone(), term.untag()),
+            TaggedStatement::Mutate(_, ref name, ref term) =>
+                Statement::Mutate(name.clone(), term.untag()),
+            TaggedStatement::Extern(_, ref name, ref ty) =>
+                Statement::Extern(name.clone(), ty.clone()),
+        }
     }
 }
 
