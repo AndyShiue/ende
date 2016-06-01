@@ -161,11 +161,11 @@ statement =
 
 block :: Parser Block
 block = do
-  many spaceChar
+  space
   symbol "{" <?> "left curly brace"
   stmts <- many statement
   end <- optional expr
-  many spaceChar
+  space
   symbol "}" <?> "right curly brace"
   return $ Block stmts end
 
