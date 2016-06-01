@@ -28,8 +28,8 @@ fn to_rust_maybe_term(i : *mut StgClosure) -> Option<Term> {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let name = get_constructor_desc(input_ref);
         match name.as_str() {
-            "base:Data.Maybe.Just" => Some(to_rust_term(get_nth_payload(input_ref, 0))),
-            "base:Data.Maybe.Nothing" => None,
+            "base:GHC.Base.Just" => Some(to_rust_term(get_nth_payload(input_ref, 0))),
+            "base:GHC.Base.Nothing" => None,
             _ => panic!("to_rust_maybe_term: unrecognized constructor name: {}", name)
         }
     }
