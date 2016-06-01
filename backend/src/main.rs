@@ -54,7 +54,10 @@ pub fn main() {
         print_usage(&program, opts);
         return;
     }
-    let output = matches.opt_str("o");
+    let output = match matches.opt_str("o") {
+        Some(output) => output,
+        None => panic!("No output specified")
+    };
     let input = if !matches.free.is_empty() {
         matches.free[0].clone()
     } else {
@@ -74,7 +77,7 @@ pub fn main() {
         println!("{:?}", result);
         let module = result.ok().unwrap();
         LLVMDumpModule(module.clone());
-        emit_ir(module);
+        emit_obj(module, output);
         haskell_exit();
     }
 }

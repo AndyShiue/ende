@@ -214,7 +214,7 @@ fn to_rust_function_call(i : *mut StgClosure) -> FunctionCall {
     }
 }
 
-fn to_rust_str(t : *const i8) -> String {
+pub fn to_rust_str(t : *const i8) -> String {
     unsafe {
         from_utf8(CStr::from_ptr(t).to_bytes()).unwrap().to_string()
     }
