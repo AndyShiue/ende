@@ -93,18 +93,18 @@ impl Block {
     }
 }
 
-pub trait Compile {
+pub trait Compile: WithTag<Type> {
 
     type Env;
 
-    fn new_env() -> Self::Env;
+    fn new_env() -> <Self as Compile>::Env;
 
     fn build(self: &Self,
                     module: LLVMModuleRef,
                     func: LLVMValueRef,
                     entry: LLVMBasicBlockRef,
                     builder: LLVMBuilderRef,
-                    env: Self::Env) -> Result<LLVMValueRef, Vec<String>>;
+                    env: <Self as Compile>::Env) -> Result<LLVMValueRef, Vec<String>>;
 
     fn init_module(self: &Self,
                    module: LLVMModuleRef,
@@ -113,7 +113,7 @@ pub trait Compile {
         unsafe {
             let entry = LLVMAppendBasicBlock(func, "entry\0".as_ptr() as *const i8);
             LLVMPositionBuilderAtEnd(builder, entry);
-            match self.build(module, func, entry, builder, Self::new_env()) {
+            match self.build(module, func, entry, builder, <Self as Compile>::new_env()) {
                 Ok(val) => {
                     LLVMBuildRet(builder, val);
                     Ok(())
@@ -125,6 +125,11 @@ pub trait Compile {
 
     fn gen_module(self: &Self) -> Result<LLVMModuleRef, Vec<String>> {
         unsafe {
+            // TODO: Refactor the whole codegen module to use typed AST.
+            let mut env = Map::new();
+            if let Err(err) = self.tag(&mut env) {
+                panic!("{:?}", err);
+            }
             let name = try!("Main".to_raw());
             let module = LLVMModuleCreateWithName(name);
             let args: &mut [LLVMTypeRef] = &mut [];
@@ -142,14 +147,14 @@ impl Compile for Term {
 
     type Env = Map<EnvData>;
 
-    fn new_env() -> Self::Env { Map::new() }
+    fn new_env() -> <Self as Compile>::Env { Map::new() }
 
     fn build(self: &Term,
              module: LLVMModuleRef,
              func: LLVMValueRef,
              entry: LLVMBasicBlockRef,
              builder: LLVMBuilderRef,
-             env: Self::Env) -> Result<LLVMValueRef, Vec<String>> {
+             env: <Self as Compile>::Env) -> Result<LLVMValueRef, Vec<String>> {
         use ast::Term::*;
         unsafe {
             // Build the instructions.
@@ -493,14 +498,14 @@ impl Compile for Block {
 
     type Env = Box<Map<EnvData>>;
 
-    fn new_env() ->  Self::Env { Box::new(Map::new()) }
+    fn new_env() ->  <Self as Compile>::Env { Box::new(Map::new()) }
 
     fn build(self: &Block,
              module: LLVMModuleRef,
              func: LLVMValueRef,
              entry: LLVMBasicBlockRef,
              builder: LLVMBuilderRef,
-             mut env: Self::Env) -> Result<LLVMValueRef, Vec<String>> {
+             mut env: <Self as Compile>::Env) -> Result<LLVMValueRef, Vec<String>> {
         use self::Direction::*;
         use ast::Statement::*;
         unsafe {
@@ -581,14 +586,14 @@ impl Compile for Program {
 
     type Env = Box<Map<EnvData>>;
 
-    fn new_env() ->  Self::Env { Box::new(Map::new()) }
+    fn new_env() ->  <Self as Compile>::Env { Box::new(Map::new()) }
 
     fn build(self: &Program,
              module: LLVMModuleRef,
              func: LLVMValueRef,
              entry: LLVMBasicBlockRef,
              builder: LLVMBuilderRef,
-             env: Self::Env) -> Result<LLVMValueRef, Vec<String>> {
+             env: <Self as Compile>::Env) -> Result<LLVMValueRef, Vec<String>> {
         self.main.build(module, func, entry, builder, env)
     }
 }

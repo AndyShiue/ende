@@ -1,14 +1,14 @@
 use std::fmt::{Display, Formatter};
 use std::fmt::Result as FmtResult;
+use std::collections::HashMap;
 
 use ast::*;
 use codegen::Map;
 
 pub trait WithTag<Tag: Clone> {
     type Tagged: Tagged<Tag>;
-    type Env;
     // If tags are types, the meaning of `tag` would be to type check.
-    fn tag(&self, env: Self::Env) -> Result<Self::Tagged, Vec<String>>;
+    fn tag(&self, env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>>;
 }
 
 pub trait Tagged<Tag: Clone>: Sized {
@@ -66,8 +66,7 @@ pub struct TaggedFunctionCall<Tag> {
 
 impl WithTag<Type> for FunctionCall {
     type Tagged = TaggedFunctionCall<Type>;
-    type Env = Map<Type>;
-    fn tag(&self, env: Self::Env) -> Result<Self::Tagged, Vec<String>> {
+    fn tag(&self, env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>> {
         let ref name = self.name;
         let func_ty =
             try!(env.get(name).ok_or(vec![format!("Function {} is undeclared.", name)]));
@@ -113,8 +112,7 @@ pub enum TaggedTerm<Tag> {
 
 impl WithTag<Type> for Term {
     type Tagged = TaggedTerm<Type>;
-    type Env = Map<Type>;
-    fn tag(&self, env: Self::Env) -> Result<Self::Tagged, Vec<String>> {
+    fn tag(&self, env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>> {
         use self::Type::*;
         match *self {
             Term::Literal(i) => Ok(TaggedTerm::Literal(I32Ty, i)),
@@ -123,7 +121,7 @@ impl WithTag<Type> for Term {
                 None => Err(vec![format!("Undeclared variable {}.", str.clone())]),
             },
             Term::Infix(ref left, ref op, ref right) => {
-                let tagged_left = try!(left.tag(env.clone()));
+                let tagged_left = try!(left.tag(&mut env.clone()));
                 let tagged_right = try!(right.tag(env));
                 let left_ty = tagged_left.get_tag();
                 let right_ty = tagged_right.get_tag();
@@ -142,7 +140,7 @@ impl WithTag<Type> for Term {
                 }
             }
             Term::Call(ref func, ref args) => {
-                let typed_func = try!(func.tag(env.clone()));
+                let typed_func = try!(func.tag(&mut env.clone()));
                 let expected_arity = typed_func.args_tags.len();
                 let actual_arity = args.len();
                 if expected_arity == actual_arity {
@@ -154,7 +152,7 @@ impl WithTag<Type> for Term {
                     let mut errors = Vec::new();
                     for (expected, actual) in pairs {
                         let expected_ty = expected.clone();
-                        let tagged_arg = try!(actual.tag(env.clone()));
+                        let tagged_arg = try!(actual.tag(&mut env.clone()));
                         if !has_error {
                             tagged_args.push(tagged_arg.clone());
                         }
@@ -179,7 +177,7 @@ impl WithTag<Type> for Term {
                 } else {
                     Err(
                         vec![
-                            format!("Function {} expects {} arguments, but only {} are provided.",
+                            format!("Function {} expects {} argument(s), but {} are provided.",
                                     func.name, expected_arity, actual_arity)
                         ]
                     )
@@ -191,9 +189,9 @@ impl WithTag<Type> for Term {
                 Ok(TaggedTerm::Scope(ty, tagged_block))
             }
             Term::If(ref if_clause, ref then_clause, ref else_clause) => {
-                let tagged_if = try!(if_clause.tag(env.clone()));
-                let tagged_then = try!(then_clause.tag(env.clone()));
-                let tagged_else = try!(else_clause.tag(env));
+                let tagged_if = try!(if_clause.tag(&mut env.clone()));
+                let tagged_then = try!(then_clause.tag(&mut env.clone()));
+                let tagged_else = try!(else_clause.tag(&mut env.clone()));
                 let then_ty = tagged_then.get_tag();
                 let else_ty = tagged_else.get_tag();
                 if then_ty == else_ty {
@@ -212,7 +210,18 @@ impl WithTag<Type> for Term {
                     )
                 }
             }
-            _ => unimplemented!()
+            Term::While(ref cond, ref block) => {
+                let tagged_cond = try!(cond.tag(&mut env.clone()));
+                let cond_ty = tagged_cond.get_tag();
+                if cond_ty != I32Ty {
+                    Err(vec!["The condition of a while loop should be of type I32".to_string()])
+                } else {
+                    let tagged_block = try!(block.tag(env));
+                    Ok(TaggedTerm::While(
+                        tagged_block.get_tag(), Box::new(tagged_cond), tagged_block
+                    ))
+                }
+            }
         }
     }
 }
@@ -270,8 +279,7 @@ pub enum TaggedStatement<Tag> {
 
 impl WithTag<Type> for Statement {
     type Tagged = TaggedStatement<Type>;
-    type Env = Map<Type>;
-    fn tag(&self, mut env: Self::Env) -> Result<Self::Tagged, Vec<String>> {
+    fn tag(&self, mut env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>> {
         use self::Type::*;
         match *self {
             Statement::TermSemicolon(ref term) => {
@@ -279,19 +287,21 @@ impl WithTag<Type> for Statement {
                     name: "Unit".to_string(),
                     variants: vec!["unit".to_string()]
                 };
-                let tagged_term = try!(term.tag(env.clone()));
+                let tagged_term = try!(term.tag(&mut env.clone()));
                 Ok(TaggedStatement::TermSemicolon(Enum(unit_enum), tagged_term))
             }
             Statement::Let(ref name, ref term) => {
-                let tagged_term = try!(term.tag(env.clone()));
+                let tagged_term = try!(term.tag(&mut env.clone()));
+                env.insert(name.clone(), tagged_term.clone().get_tag());
                 Ok(TaggedStatement::Let(Forbidden, name.clone(), tagged_term))
             }
             Statement::LetMut(ref name, ref term) => {
-                let tagged_term = try!(term.tag(env.clone()));
+                let tagged_term = try!(term.tag(&mut env.clone()));
+                env.insert(name.clone(), tagged_term.clone().get_tag());
                 Ok(TaggedStatement::LetMut(Forbidden, name.clone(), tagged_term))
             }
             Statement::Mutate(ref name, ref term) => {
-                let tagged_term = try!(term.tag(env.clone()));
+                let tagged_term = try!(term.tag(&mut env.clone()));
                 Ok(TaggedStatement::Mutate(Forbidden, name.clone(), tagged_term))
             }
             Statement::Extern(ref name, ref ty) => {
@@ -340,11 +350,10 @@ pub struct TaggedBlock<Tag> {
 
 impl WithTag<Type> for Block {
     type Tagged = TaggedBlock<Type>;
-    type Env = Map<Type>;
-    fn tag(&self, env: Self::Env) -> Result<Self::Tagged, Vec<String>> {
+    fn tag(&self, mut env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>> {
         let mut tagged_stmts = Vec::new();
         for stmt in &self.stmts {
-            let tagged_stmt = try!(stmt.tag(env.clone()));
+            let tagged_stmt = try!(stmt.tag(env));
             tagged_stmts.push(tagged_stmt);
         }
         let end = match *self.end {
@@ -378,6 +387,34 @@ impl Tagged<Type> for TaggedBlock<Type> {
         Block {
             stmts: self.stmts.iter().map(TaggedStatement::untag).collect(),
             end: Box::new(self.clone().end.map(|term| term.untag())),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TaggedProgram<Tag> {
+    pub main: TaggedBlock<Tag>,
+}
+
+impl WithTag<Type> for Program {
+    type Tagged = TaggedProgram<Type>;
+    fn tag(&self, env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>> {
+        Ok(
+            TaggedProgram {
+                main: try!(self.main.tag(env))
+            }
+        )
+    }
+}
+
+impl Tagged<Type> for TaggedProgram<Type> {
+    type Untagged = Program;
+    fn get_tag(&self) -> Type {
+        Type::Forbidden
+    }
+    fn untag(&self) -> Program {
+        Program {
+            main: self.main.untag()
         }
     }
 }

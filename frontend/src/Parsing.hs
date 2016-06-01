@@ -164,6 +164,7 @@ block = do
   symbol "{" <?> "left curly brace"
   stmts <- many statement
   end <- optional expr
+  symbol "}" <?> "right curly brace"
   return $ Block stmts end
 
 program :: Parser Program
