@@ -33,7 +33,7 @@ rightParen :: Parser String
 rightParen = symbol ")" <?> "right parenthesis"
 
 literal :: Parser Term
-literal = Literal . read <$> (lexeme $ someTill digitChar space)
+literal = Literal . fromInteger <$> Lexer.integer
 
 var :: Parser Term
 var = Var <$> lexeme (some letterChar)
@@ -73,8 +73,8 @@ term =
    (try while <?> "while loop") <|>
    (try functionCall <?> "function call") <|>
    (try var <?> "variable") <|>
-   (try literal <?> "literal") <|>
-   (try scope <?> "scope")
+   (literal <?> "literal") <|>
+   (scope <?> "scope")
 
 opToString :: Operator -> String
 opToString Add = "+"
@@ -89,9 +89,9 @@ opToElement :: Operator -> Expr.Operator Parser Term
 opToElement op = Expr.InfixL $ opToFunc op <$ (symbol $ opToString op)
 
 table = [ [ opToElement Mul
-         , opToElement Div ]
-       , [ opToElement Add
-         , opToElement Sub ] ]
+          , opToElement Div ]
+        , [ opToElement Add
+          , opToElement Sub ] ]
 
 expr :: Parser Term
 expr = Expr.makeExprParser term table
@@ -141,7 +141,7 @@ ty = do
   symbol ")"
   symbol "->"
   symbol "I32"
-  symbol ";"
+  semicolon
   return $ FunctionTy (replicate (length types) I32Ty) I32Ty
 
 extern_stmt :: Parser Statement
@@ -161,17 +161,10 @@ statement =
 
 block :: Parser Block
 block = do
-  symbol "{"
+  symbol "{" <?> "left curly brace"
   stmts <- many statement
-  end <- optional expr
-  symbol "}"
-  let (realStmts, realEnd) = case end of
-                               Just term -> (stmts, fromJust end)
-                               Nothing -> case stmts of
-                                            -- TODO: Handle the error properly.
-                                            [] -> error "No statement"
-                                            _  -> (init stmts, Stmt $ last stmts)
-  return $ Block realStmts realEnd
+  end <- expr
+  return $ Block stmts end
 
 -- TODO: Handle the error properly.
 toBlock :: String -> Block
@@ -181,7 +174,7 @@ toBlock str = unwrap $ parse block "" str
    unwrap (Right term) = term
 
 block' :: Block
-block' = toBlock "{ extern print(I32) -> I32; let mut countdown = 9; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 }"
+block' = toBlock "{ extern print(I32) -> I32; let mut countdown = 100; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 }"
 
 getTree :: IO (StablePtr Block)
 getTree = newStablePtr $!! block'
