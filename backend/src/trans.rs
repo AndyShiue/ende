@@ -19,7 +19,19 @@ pub fn to_rust_block(i : *mut StgClosure) -> Block {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         Block {
             stmts : to_rust_statements(get_nth_payload(input_ref, 0)),
-            end : Box::new(to_rust_term(get_nth_payload(input_ref, 1)))
+            end : Box::new(to_rust_maybe_term(get_nth_payload(input_ref, 1)))
+        }
+    }
+}
+fn to_rust_maybe_term(i : *mut StgClosure) -> Option<Term> {
+    unsafe {
+        let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
+        let input = *input_ref;
+        let name = get_constructor_desc(input_ref);
+        match name.as_str() {
+            "base:Data.Maybe.Just" => Some(to_rust_term(get_nth_payload(input_ref, 0))),
+            "base:Data.Maybe.Nothing" => None,
+            _ => panic!("to_rust_maybe_term: unrecognized constructor name: {}", name)
         }
     }
 }
