@@ -33,7 +33,10 @@ rightParen :: Parser String
 rightParen = symbol ")" <?> "right parenthesis"
 
 literal :: Parser Term
-literal = Literal . fromInteger <$> Lexer.integer
+literal = do
+  int <- Lexer.integer
+  space
+  return . Literal . fromInteger $ int
 
 var :: Parser Term
 var = Var <$> lexeme (some letterChar)
@@ -161,11 +164,9 @@ statement =
 
 block :: Parser Block
 block = do
-  space
   symbol "{" <?> "left curly brace"
   stmts <- many statement
   end <- optional expr
-  space
   symbol "}" <?> "right curly brace"
   return $ Block stmts end
 
