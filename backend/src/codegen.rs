@@ -1,10 +1,11 @@
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_void};
 use std::collections::{HashSet, HashMap};
 
 use llvm_sys::prelude::*;
 use llvm_sys::core::*;
 
 use ast::*;
+use trans::to_rust_str;
 use type_check::*;
 use type_check::Type::*;
 
@@ -599,7 +600,7 @@ impl Compile for Program {
 }
 
 // Doesn't work right now. Will try to fix.
-pub unsafe fn emit_obj(module: LLVMModuleRef) {
+pub unsafe fn emit_obj(module: LLVMModuleRef, output: String) {
     use llvm_sys::target::*;
     use llvm_sys::target_machine::*;
     let triple = LLVMGetDefaultTargetTriple();
@@ -613,13 +614,16 @@ pub unsafe fn emit_obj(module: LLVMModuleRef) {
     let target_machine =
         LLVMCreateTargetMachine(target, triple, cpu, feature, opt_level, reloc_mode, code_model);
     let file_type = LLVMCodeGenFileType::LLVMObjectFile;
-    // TODO: error handling here.
-    LLVMTargetMachineEmitToFile(target_machine,
-                                module,
-                                "/Users/andyshiue/Desktop/main.o".to_raw().unwrap() as *mut i8,
-                                file_type,
-                                ["Cannot init_module file.\0".as_ptr()] // This is wrong.
-                                    .as_mut_ptr() as *mut *mut i8);
+    let mut err_msg : *mut i8 = 0 as *mut i8;
+    let ret = LLVMTargetMachineEmitToFile(target_machine,
+                                          module,
+                                          output.as_str().to_raw().unwrap() as *mut i8,
+                                          file_type,
+                                          &mut err_msg as *mut *mut i8);
+    if ret != 0 {
+        let err_str : String = to_rust_str(err_msg);
+        println!("{}", err_str);
+    }
 }
 
 

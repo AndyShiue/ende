@@ -4,7 +4,8 @@ module Parsing
 
 import Foreign.Ptr
 import Foreign.StablePtr
-
+import Foreign.C.String
+    
 import Data.Maybe
 import Control.Monad (void)
 import Control.DeepSeq (($!!))
@@ -191,7 +192,10 @@ toProgram str = unwrap $ parse program "" str
 program' :: Program
 program' = toProgram "fn main() -> Unit { extern print(I32) -> I32; let mut countdown = 100; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 }"
 
-getTree :: IO (StablePtr Program)
-getTree = newStablePtr $!! program'
+parseProgram :: CString -> IO (StablePtr Program)
+parseProgram x = do
+  str <- peekCString x
+  newStablePtr $!! toProgram str
 
-foreign export ccall getTree :: IO (StablePtr Program)
+foreign export ccall parseProgram :: CString -> IO (StablePtr Program)
+
