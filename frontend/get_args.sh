@@ -21,7 +21,7 @@ for word in $x ; do
 		    echo "Found ghc lib path: $temp"
 		    ghc_lib_path=$temp
 		fi
-	fi
+	    fi
 	fi
 	if [ "-l" = "$(echo $word | head -c 2)" ]; then
 	    #lib
