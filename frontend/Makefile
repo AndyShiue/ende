@@ -1,4 +1,7 @@
-all:
+all: src/Parsing.o
+
+
+src/Parsing.o : src/Ast.hs src/Parsing.hs
 	make clean
 	stack build 2> log || (cat log && false)
 	./get_args.sh
@@ -7,4 +10,4 @@ all:
 	./bind.sh
 clean:
 	stack clean
-	rm ghc_lib_path link_search linker_args all_pkg_path link_lib src/Ast.o src/Ast.hi src/Parsing.o src/Parsing_stub.h Ast.rs rts.rs libParsing.a || true
+	rm -f ghc_lib_path link_search linker_args all_pkg_path link_lib src/Ast.o src/Ast.hi src/Parsing.o src/Parsing_stub.h Ast.rs rts.rs libParsing.a

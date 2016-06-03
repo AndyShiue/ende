@@ -5,3 +5,6 @@ all:
 clean:
 	make -C frontend clean
 	make -C backend clean
+distclean:
+	make -C frontend clean
+	make -C backend distclean
