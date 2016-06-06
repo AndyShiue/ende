@@ -7,7 +7,7 @@ link_search=""
 include=""
 for word in $x ; do
     if [ "-" = "$(echo $word | head -c 1)" ]; then
-	echo $word | grep '-lHSende\|search_paths_first\|,-u,' > /dev/null
+	echo $word | grep '\-lHSende\|search_paths_first\|,\-u,' > /dev/null
 	if [ $? -ne 0 ]; then
 	    args="$word $args"
 	fi
@@ -21,11 +21,11 @@ for word in $x ; do
 		    echo "Found ghc lib path: $temp"
 		    ghc_lib_path=$temp
 		fi
-	fi
+	    fi
 	fi
 	if [ "-l" = "$(echo $word | head -c 2)" ]; then
 	    #lib
-	    echo $word | grep '-lHSende\|search_paths_first\|,-u,' > /dev/null
+	    echo $word | grep '\-lHSende\|search_paths_first\|,\-u,' > /dev/null
 	    if [ $? -ne 0 ]; then
 		link_lib="$(echo $word | tail -c +3) $link_lib"
 	    fi

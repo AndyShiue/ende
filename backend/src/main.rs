@@ -16,10 +16,10 @@ unsafe fn haskell_init() {
     let filename : &[u8] = b"main\x00";
     let mut argc : i32 = 1;
     let mut argv : & [*const u8] = &[filename.as_ptr(),::core::ptr::null()];
-    ende::Rts::hs_init(&mut argc, transmute(&mut argv));
+    ende::HsClosureFunc::hs_init(&mut argc, transmute(&mut argv));
 }
 unsafe fn haskell_exit() {
-    ende::Rts::hs_exit();
+    ende::HsClosureFunc::hs_exit();
 }
 
 pub fn main() {

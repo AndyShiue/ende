@@ -1,6 +1,5 @@
 use HsClosureFunc::*;
 
-use Rts;
 use ast::*;
 use type_check::*;
 use std::ffi::CStr;
