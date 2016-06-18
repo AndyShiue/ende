@@ -1,5 +1,6 @@
 use std::os::raw::{c_char, c_void};
 use std::collections::{HashSet, HashMap};
+use std::process::Command;
 
 use llvm_sys::prelude::*;
 use llvm_sys::core::*;
@@ -599,35 +600,33 @@ impl Compile for Program {
     }
 }
 
-// Doesn't work right now. Will try to fix.
-pub unsafe fn emit_obj(module: LLVMModuleRef, output: String) {
-    use llvm_sys::target::*;
-    use llvm_sys::target_machine::*;
-    let triple = LLVMGetDefaultTargetTriple();
-    LLVM_InitializeNativeTarget();
-    let target = LLVMGetFirstTarget();
-    let cpu = "x86-64\0".as_ptr() as *const i8;
-    let feature = "\0".as_ptr() as *const i8;
-    let opt_level = LLVMCodeGenOptLevel::LLVMCodeGenLevelNone;
-    let reloc_mode = LLVMRelocMode::LLVMRelocDefault;
-    let code_model = LLVMCodeModel::LLVMCodeModelDefault;
-    let target_machine =
-        LLVMCreateTargetMachine(target, triple, cpu, feature, opt_level, reloc_mode, code_model);
-    let file_type = LLVMCodeGenFileType::LLVMObjectFile;
-    let mut err_msg : *mut i8 = 0 as *mut i8;
-    let ret = LLVMTargetMachineEmitToFile(target_machine,
-                                          module,
-                                          output.as_str().to_raw().unwrap() as *mut i8,
-                                          file_type,
-                                          &mut err_msg as *mut *mut i8);
-    if ret != 0 {
-        let err_str : String = to_rust_str(err_msg);
-        println!("{}", err_str);
-    }
+pub unsafe fn emit_ir(module: LLVMModuleRef, output: String) {
+    use llvm_sys::bit_writer::*;
+    let mut bc = output.clone();
+    bc.push_str(".bc");
+    LLVMWriteBitcodeToFile(module, bc.to_raw().unwrap());
 }
 
-
-pub unsafe fn emit_ir(module: LLVMModuleRef) {
-    use llvm_sys::bit_writer::*;
-    LLVMWriteBitcodeToFile(module, "/Users/andyshiue/Desktop/main.bc".to_raw().unwrap());
+pub unsafe fn emit_exe(output: String) {
+    let mut bc = output.clone();
+    bc.push_str(".bc");
+    let mut o = output.clone();
+    o.push_str(".o");
+    let llc_output = Command::new("llc")
+        .arg(bc)
+        .arg("--filetype=obj")
+        .arg("-o")
+        .arg(o.clone())
+        .output()
+        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+    println!("{}", String::from_utf8_lossy(&*llc_output.stdout));
+    println!("{}", String::from_utf8_lossy(&*llc_output.stderr));
+    let gcc_output = Command::new("gcc")
+        .arg("-o")
+        .arg(output)
+        .arg(o)
+        .output()
+        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+    println!("{}", String::from_utf8_lossy(&*gcc_output.stdout));
+    println!("{}", String::from_utf8_lossy(&*gcc_output.stderr));
 }
