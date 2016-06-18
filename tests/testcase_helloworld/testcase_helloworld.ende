@@ -1,0 +1,9 @@
+fn main() -> Unit {
+   extern put(String) -> void;
+   let mut countdown = 100;
+   while countdown {
+      put(countdown);
+      countdown = countdown - 1;
+   };
+}
+   
