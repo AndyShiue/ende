@@ -1,0 +1,10 @@
+fn main() -> Unit {
+   extern putchar(I32) -> I32;
+   let mut countdown = 100;
+   while countdown {
+      putchar(countdown);
+      countdown = countdown - 1;
+   };
+   0
+}
+   

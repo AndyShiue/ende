@@ -78,7 +78,8 @@ pub fn main() {
         println!("{:?}", result);
         let module = result.ok().unwrap();
         LLVMDumpModule(module.clone());
-        emit_obj(module, output);
+        emit_ir(module, output.clone());
+        emit_exe(output);
         haskell_exit();
     }
 }

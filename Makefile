@@ -5,6 +5,9 @@ all:
 clean:
 	make -C frontend clean
 	make -C backend clean
+	make -C tests clean
 distclean:
 	make -C frontend clean
 	make -C backend distclean
+test:
+	make -C tests
