@@ -618,7 +618,7 @@ pub unsafe fn emit_exe(output: String) {
         .arg("-o")
         .arg(o.clone())
         .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+        .unwrap_or_else(|e| { panic!("failed to execute llc", e) });
     println!("{}", String::from_utf8_lossy(&*llc_output.stdout));
     println!("{}", String::from_utf8_lossy(&*llc_output.stderr));
     let gcc_output = Command::new("gcc")
@@ -626,7 +626,7 @@ pub unsafe fn emit_exe(output: String) {
         .arg(output)
         .arg(o)
         .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+        .unwrap_or_else(|e| { panic!("failed to execute gcc", e) });
     println!("{}", String::from_utf8_lossy(&*gcc_output.stdout));
     println!("{}", String::from_utf8_lossy(&*gcc_output.stderr));
 }

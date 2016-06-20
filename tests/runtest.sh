@@ -26,4 +26,5 @@ for i in $(echo `ls | grep testcase`) ; do
 done
 if [ "$failed_tests" != "" ]; then
     echo "failed tests: $failed_tests"
+    exit 1
 fi
