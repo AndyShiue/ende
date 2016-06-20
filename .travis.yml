@@ -8,6 +8,7 @@ install:
   - brew install llvm
 
 script:
+  - sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.locate.plist
   - ./configure
   - make
   - make test
@@ -15,3 +16,4 @@ script:
 cache:
   directories:
   - ./rust-bindgen
+  - $HOME/.stack
