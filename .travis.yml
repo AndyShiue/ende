@@ -16,4 +16,5 @@ script:
 cache:
   directories:
   - ./rust-bindgen
+  - ./frontend/.stack-work
   - $HOME/.stack
