@@ -1,6 +1,6 @@
 os:
   - osx
-
+sudo: required
 install:
   - brew update
   - brew install rust
