@@ -7,3 +7,4 @@ if [ ! -e rust-bindgen ]; then
   fi
 fi
 cd rust-bindgen && git checkout 0433980286a5264e3d69214aa42e314c37238cf6 && git reset --hard
+stack setup
