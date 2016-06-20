@@ -1,0 +1,16 @@
+os:
+  -osx
+
+before install:
+  - brew update
+  - brew install rust
+  - brew install haskell-stack
+  - brew install llvm
+
+install:
+  - true
+
+script:
+  - ./configure
+  - make
+  - make test
