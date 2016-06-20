@@ -1,9 +1,11 @@
 os:
   - osx
 sudo: required
+language: rust
+rust:
+  - stable
 install:
   - brew update
-  - brew install rust
   - brew install haskell-stack
   - brew install llvm
 
