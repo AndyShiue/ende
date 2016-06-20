@@ -1,14 +1,11 @@
 os:
   - osx
 
-before install:
+install:
   - brew update
   - brew install rust
   - brew install haskell-stack
   - brew install llvm
-
-install:
-  - true
 
 script:
   - ./configure
