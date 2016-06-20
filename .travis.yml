@@ -1,19 +1,16 @@
 os:
   - osx
+  - linux
 sudo: required
 language: rust
 rust:
   - stable
 install:
-  - brew update
-  - brew install haskell-stack
-  - brew install llvm
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update && brew install haskell-stack && brew install llvm; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux ]]; then apt-get install -y llvm-dev haskell-stack; fi
 
 script:
-  - sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.locate.plist
-  - ./configure
-  - make
-  - make test
+  - ./configure && make && make test
 
 cache:
   directories:
