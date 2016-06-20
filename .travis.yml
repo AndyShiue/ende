@@ -11,3 +11,7 @@ script:
   - ./configure
   - make
   - make test
+
+cache:
+  directories:
+  - ./rust-bindgen
