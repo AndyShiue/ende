@@ -1,5 +1,5 @@
 os:
-  -osx
+  - osx
 
 before install:
   - brew update
