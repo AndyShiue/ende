@@ -1,6 +1,6 @@
 #!/bin/bash
-rm -f rust-bindgen
-if [ ! -e rust-bindgen ]; then
+if [ ! -e rust-bindgen/Cargo.toml ]; then
+  rm -rf rust-bindgen
   git clone https://github.com/crabtw/rust-bindgen.git
   if [ $? != 0 ]; then
     echo "Failed to clone rust-bindgen"
