@@ -49,7 +49,7 @@ data TaggedBlock t = TaggedBlock { tag :: t
                                  , end :: Maybe (TaggedTerm t)
                                  } deriving (Show, Eq, Generic, NFData)
 
-data TaggedProgram t = TaggedProgram t (TaggedBlock Position) deriving (Show, Eq, Generic, NFData)
+data TaggedProgram t = TaggedProgram t (TaggedBlock t) deriving (Show, Eq, Generic, NFData)
 
 -- TODO: the code below should be rewritten using GHC's Generic in th future.
 
