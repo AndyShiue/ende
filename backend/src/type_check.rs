@@ -59,6 +59,7 @@ impl Display for Enumeration {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TaggedFunctionCall<Tag> {
+    pub tag: Tag,
     pub name: String,
     pub args_tags: Vec<Tag>,
     pub ret_tag: Tag
@@ -74,6 +75,7 @@ impl WithTag<Type> for FunctionCall {
             Type::FunctionTy(ref args_types, ref ret_ty) => {
                 Ok(
                     TaggedFunctionCall {
+                        tag: unreachable!(),
                         name: name.clone(),
                         args_tags: args_types.clone(),
                         ret_tag: *ret_ty.clone(),
@@ -352,6 +354,7 @@ impl Tagged<Type> for TaggedStatement<Type> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TaggedBlock<Tag> {
+    pub tag: Tag,
     pub stmts: Vec<TaggedStatement<Tag>>,
     pub end: Box<Option<TaggedTerm<Tag>>>,
 }
@@ -370,6 +373,7 @@ impl WithTag<Type> for Block {
         };
         Ok(
             TaggedBlock {
+                tag: unreachable!(),
                 stmts: tagged_stmts,
                 end: Box::new(end),
             }

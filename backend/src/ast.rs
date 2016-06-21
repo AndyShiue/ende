@@ -66,6 +66,12 @@ pub enum Statement {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Position {
+    pub start_pos: (i32, i32),
+    pub end_pos: (i32, i32),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Block {
     pub stmts: Vec<Statement>,
     pub end: Box<Option<Term>>,
