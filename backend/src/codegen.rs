@@ -64,6 +64,7 @@ impl Term {
             }
             While(ref cond, ref block) =>
                 cond.rhs_vars().union(&block.rhs_vars()).cloned().collect(),
+            Stmt(ref stmt) => stmt.rhs_vars()
         }
     }
 }
@@ -469,6 +470,7 @@ impl Compile for Term {
                     // Done.
                     Ok(zero)
                 }
+                Stmt(ref stmt) => unimplemented!()
             }
         }
     }

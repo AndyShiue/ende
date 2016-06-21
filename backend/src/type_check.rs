@@ -108,6 +108,7 @@ pub enum TaggedTerm<Tag> {
     Scope(Tag, TaggedBlock<Tag>),
     If(Tag, Box<TaggedTerm<Tag>>, Box<TaggedTerm<Tag>>, Box<TaggedTerm<Tag>>),
     While(Tag, Box<TaggedTerm<Tag>>, TaggedBlock<Tag>),
+    Stmt(Box<TaggedStatement<Tag>>),
 }
 
 impl WithTag<Type> for Term {
@@ -222,6 +223,9 @@ impl WithTag<Type> for Term {
                     ))
                 }
             }
+            Term::Stmt(ref stmt) => {
+                Ok(TaggedTerm::Stmt(Box::new(try!(stmt.tag(env)))))
+            }
         }
     }
 }
@@ -239,6 +243,7 @@ impl Tagged<Type> for TaggedTerm<Type> {
             Scope(ref tag, _) => tag.clone(),
             If(ref tag, _, _, _) => tag.clone(),
             While(ref tag, _, _) => tag.clone(),
+            Stmt(ref block) => block.get_tag(),
         }
     }
     fn untag(&self) -> Term {
@@ -263,6 +268,9 @@ impl Tagged<Type> for TaggedTerm<Type> {
             }
             TaggedTerm::While(_, ref cond, ref block) => {
                 Term::While(Box::new(cond.untag()), block.untag())
+            }
+            TaggedTerm::Stmt(ref block) => {
+                Term::Stmt(Box::new(block.untag()))
             }
         }
     }

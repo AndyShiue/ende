@@ -44,6 +44,7 @@ pub enum Term {
     Scope(Block),
     If(Box<Term>, Box<Term>, Box<Term>),
     While(Box<Term>, Block),
+    Stmt(Box<Statement>),
 }
 
 #[macro_export]
