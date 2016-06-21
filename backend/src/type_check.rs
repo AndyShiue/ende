@@ -401,6 +401,7 @@ impl Tagged<Type> for TaggedBlock<Type> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TaggedProgram<Tag> {
+    pub tag: Tag,
     pub main: TaggedBlock<Tag>,
 }
 
@@ -409,6 +410,7 @@ impl WithTag<Type> for Program {
     fn tag(&self, env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>> {
         Ok(
             TaggedProgram {
+                tag: unreachable!(),
                 main: try!(self.main.tag(env))
             }
         )
