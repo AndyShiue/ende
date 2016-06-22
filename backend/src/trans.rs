@@ -19,7 +19,7 @@ impl FromHaskellRepr for Position {
             "main:Ast.Position" => {
                 Position {
                     start_pos : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)),
-                    end_pos : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0))
+                    end_pos : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1))
                 }
             },
             _ => panic!("from_haskell_repr Position: unrecognized constructor name: {}", con_name)
