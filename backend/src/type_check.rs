@@ -8,12 +8,12 @@ use codegen::Map;
 pub trait WithTag<Tag: Clone> {
     type Tagged: Tagged<Tag>;
     // If tags are types, the meaning of `tag` would be to type check.
-    fn tag(&self, env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>>;
+    fn tag(&self, env: &mut Map<Tag>) -> Result<Self::Tagged, Vec<String>>;
 }
 
 pub trait Tagged<Tag: Clone>: Sized {
     type Untagged: WithTag<Tag, Tagged=Self>;
-    fn get_tag(&self) -> Tag;
+    fn get_tag(&self) -> Box<Tag>;
     fn untag(&self) -> Self::Untagged;
 }
 
@@ -61,8 +61,6 @@ impl Display for Enumeration {
 pub struct TaggedFunctionCall<Tag> {
     pub tag: Tag,
     pub name: String,
-    pub args_tags: Vec<Tag>,
-    pub ret_tag: Tag
 }
 
 impl WithTag<Type> for FunctionCall {
@@ -71,14 +69,12 @@ impl WithTag<Type> for FunctionCall {
         let ref name = self.name;
         let func_ty =
             try!(env.get(name).ok_or(vec![format!("Function {} is undeclared.", name)]));
-        match *func_ty {
-            Type::FunctionTy(ref args_types, ref ret_ty) => {
+        match func_ty.clone() {
+            ty @ Type::FunctionTy(..) => {
                 Ok(
                     TaggedFunctionCall {
-                        tag: unreachable!(),
+                        tag: ty,
                         name: name.clone(),
-                        args_tags: args_types.clone(),
-                        ret_tag: *ret_ty.clone(),
                     }
                 )
             }
@@ -91,8 +87,8 @@ impl WithTag<Type> for FunctionCall {
 
 impl Tagged<Type> for TaggedFunctionCall<Type> {
     type Untagged = FunctionCall;
-    fn get_tag(&self) -> Type {
-        Type::FunctionTy(self.clone().args_tags, Box::new(self.clone().ret_tag))
+    fn get_tag(&self) -> Box<Type> {
+        Box::new(self.tag.clone())
     }
     fn untag(&self) -> FunctionCall {
         FunctionCall {
@@ -126,8 +122,8 @@ impl WithTag<Type> for Term {
             Term::Infix(ref left, ref op, ref right) => {
                 let tagged_left = try!(left.tag(&mut env.clone()));
                 let tagged_right = try!(right.tag(env));
-                let left_ty = tagged_left.get_tag();
-                let right_ty = tagged_right.get_tag();
+                let left_ty = *tagged_left.get_tag();
+                let right_ty = *tagged_right.get_tag();
                 if left_ty == I32Ty && right_ty == I32Ty {
                     Ok(TaggedTerm::Infix(
                         left_ty, Box::new(tagged_left), op.clone(), Box::new(tagged_right)
@@ -144,12 +140,16 @@ impl WithTag<Type> for Term {
             }
             Term::Call(ref func, ref args) => {
                 let typed_func = try!(func.tag(&mut env.clone()));
-                let expected_arity = typed_func.args_tags.len();
+                let (expected_args_types, expected_ret_ty) =
+                    if let Type::FunctionTy(args_types, ret_ty) = typed_func.tag {
+                        (args_types, *ret_ty)
+                    } else {
+                        unreachable!()
+                    };
+                let expected_arity = expected_args_types.len();
                 let actual_arity = args.len();
                 if expected_arity == actual_arity {
-                    let pairs = typed_func.args_tags
-                                          .iter()
-                                          .zip(args);
+                    let pairs = expected_args_types.iter().zip(args);
                     let mut has_error = false;
                     let mut tagged_args = Vec::new();
                     let mut errors = Vec::new();
@@ -160,7 +160,7 @@ impl WithTag<Type> for Term {
                             tagged_args.push(tagged_arg.clone());
                         }
                         let actual_ty = tagged_arg.get_tag();
-                        if expected_ty != actual_ty {
+                        if expected_ty != *actual_ty {
                             has_error = true;
                             errors.push(
                                 format!(
@@ -172,7 +172,7 @@ impl WithTag<Type> for Term {
                     }
                     if errors.len() == 0 {
                         Ok(TaggedTerm::Call(
-                            typed_func.ret_tag, try!(func.tag(env)), tagged_args.clone()
+                            expected_ret_ty, try!(func.tag(env)), tagged_args.clone()
                         ))
                     } else {
                         Err(errors)
@@ -189,14 +189,14 @@ impl WithTag<Type> for Term {
             Term::Scope(ref block) => {
                 let tagged_block = try!(block.tag(env));
                 let ty = tagged_block.get_tag();
-                Ok(TaggedTerm::Scope(ty, tagged_block))
+                Ok(TaggedTerm::Scope(*ty, tagged_block))
             }
             Term::If(ref if_clause, ref then_clause, ref else_clause) => {
                 let tagged_if = try!(if_clause.tag(&mut env.clone()));
                 let tagged_then = try!(then_clause.tag(&mut env.clone()));
                 let tagged_else = try!(else_clause.tag(&mut env.clone()));
-                let then_ty = tagged_then.get_tag();
-                let else_ty = tagged_else.get_tag();
+                let then_ty = *tagged_then.get_tag().clone();
+                let else_ty = *tagged_else.get_tag().clone();
                 if then_ty == else_ty {
                     Ok(TaggedTerm::If(
                         then_ty, Box::new(tagged_if), Box::new(tagged_then), Box::new(tagged_else)
@@ -215,13 +215,13 @@ impl WithTag<Type> for Term {
             }
             Term::While(ref cond, ref block) => {
                 let tagged_cond = try!(cond.tag(&mut env.clone()));
-                let cond_ty = tagged_cond.get_tag();
+                let cond_ty = *tagged_cond.get_tag();
                 if cond_ty != I32Ty {
                     Err(vec!["The condition of a while loop should be of type I32".to_string()])
                 } else {
                     let tagged_block = try!(block.tag(env));
                     Ok(TaggedTerm::While(
-                        tagged_block.get_tag(), Box::new(tagged_cond), tagged_block
+                        *tagged_block.get_tag(), Box::new(tagged_cond), tagged_block
                     ))
                 }
             }
@@ -235,17 +235,23 @@ impl WithTag<Type> for Term {
 // TODO: write a procedural macro for tagged whatever.
 impl Tagged<Type> for TaggedTerm<Type> {
     type Untagged = Term;
-    fn get_tag(&self) -> Type {
+    fn get_tag(&self) -> Box<Type> {
         use self::TaggedTerm::*;
         match *self {
-            Literal(ref tag, _) => tag.clone(),
-            Var(ref tag, _) => tag.clone(),
-            Infix(ref tag, _, _, _) => tag.clone(),
-            Call(ref tag, _, _) => tag.clone(),
-            Scope(ref tag, _) => tag.clone(),
-            If(ref tag, _, _, _) => tag.clone(),
-            While(ref tag, _, _) => tag.clone(),
-            Stmt(ref block) => block.get_tag(),
+            Literal(ref tag, _) => Box::new(tag.clone()),
+            Var(ref tag, _) => Box::new(tag.clone()),
+            Infix(ref tag, _, _, _) => Box::new(tag.clone()),
+            Call(ref tag, _, _) => Box::new(tag.clone()),
+            Scope(ref tag, _) => Box::new(tag.clone()),
+            If(ref tag, _, _, _) => Box::new(tag.clone()),
+            While(ref tag, _, _) => Box::new(tag.clone()),
+            Stmt(ref block) => {
+                let unit_enum = Enumeration {
+                    name: "Unit".to_string(),
+                    variants: vec!["unit".to_string()]
+                };
+                Box::new(Type::Enum(unit_enum))
+            }
         }
     }
     fn untag(&self) -> Term {
@@ -302,12 +308,12 @@ impl WithTag<Type> for Statement {
             }
             Statement::Let(ref name, ref term) => {
                 let tagged_term = try!(term.tag(&mut env.clone()));
-                env.insert(name.clone(), tagged_term.clone().get_tag());
+                env.insert(name.clone(), *tagged_term.get_tag());
                 Ok(TaggedStatement::Let(Forbidden, name.clone(), tagged_term))
             }
             Statement::LetMut(ref name, ref term) => {
                 let tagged_term = try!(term.tag(&mut env.clone()));
-                env.insert(name.clone(), tagged_term.clone().get_tag());
+                env.insert(name.clone(), *tagged_term.get_tag());
                 Ok(TaggedStatement::LetMut(Forbidden, name.clone(), tagged_term))
             }
             Statement::Mutate(ref name, ref term) => {
@@ -327,14 +333,14 @@ impl WithTag<Type> for Statement {
 
 impl Tagged<Type> for TaggedStatement<Type> {
     type Untagged = Statement;
-    fn get_tag(&self) -> Type {
+    fn get_tag(&self) -> Box<Type> {
         use self::TaggedStatement::*;
         match *self {
-            TermSemicolon(ref ty, _) => ty.clone(),
-            Let(ref ty, _, _) => ty.clone(),
-            LetMut(ref ty, _, _) => ty.clone(),
-            Mutate(ref ty, _, _) => ty.clone(),
-            Extern(ref ty, _, _) => ty.clone(),
+            TermSemicolon(ref ty, _) => Box::new(ty.clone()),
+            Let(ref ty, _, _) => Box::new(ty.clone()),
+            LetMut(ref ty, _, _) => Box::new(ty.clone()),
+            Mutate(ref ty, _, _) => Box::new(ty.clone()),
+            Extern(ref ty, _, _) => Box::new(ty.clone()),
         }
     }
     fn untag(&self) -> Statement {
@@ -371,9 +377,19 @@ impl WithTag<Type> for Block {
             Some(ref term) => Some(try!(term.tag(env))),
             None => None
         };
+        let ty = match end.clone() {
+            Some(tagged) => tagged.get_tag(),
+            None => {
+                let unit_enum = Enumeration {
+                    name: "Unit".to_string(),
+                    variants: vec!["unit".to_string()]
+                };
+                Box::new(Type::Enum(unit_enum))
+            }
+        };
         Ok(
             TaggedBlock {
-                tag: unreachable!(),
+                tag: *ty,
                 stmts: tagged_stmts,
                 end: Box::new(end),
             }
@@ -383,17 +399,8 @@ impl WithTag<Type> for Block {
 
 impl Tagged<Type> for TaggedBlock<Type> {
     type Untagged = Block;
-    fn get_tag(&self) -> Type {
-        match *self.end {
-            Some(ref term) => term.get_tag(),
-            None => {
-                let unit_enum = Enumeration {
-                    name: "Unit".to_string(),
-                    variants: vec!["unit".to_string()]
-                };
-                Type::Enum(unit_enum)
-            }
-        }
+    fn get_tag(&self) -> Box<Type> {
+        Box::new(self.tag.clone())
     }
     fn untag(&self) -> Block {
         Block {
@@ -414,7 +421,7 @@ impl WithTag<Type> for Program {
     fn tag(&self, env: &mut Map<Type>) -> Result<Self::Tagged, Vec<String>> {
         Ok(
             TaggedProgram {
-                tag: unreachable!(),
+                tag: Type::Forbidden,
                 main: try!(self.main.tag(env))
             }
         )
@@ -423,8 +430,156 @@ impl WithTag<Type> for Program {
 
 impl Tagged<Type> for TaggedProgram<Type> {
     type Untagged = Program;
-    fn get_tag(&self) -> Type {
-        Type::Forbidden
+    fn get_tag(&self) -> Box<Type> {
+        Box::new(self.tag.clone())
+    }
+    fn untag(&self) -> Program {
+        Program {
+            main: self.main.untag()
+        }
+    }
+}
+
+// All the code below will be removed after compiling actually accept AST with position tags.
+
+impl WithTag<Position> for FunctionCall {
+    type Tagged = TaggedFunctionCall<Position>;
+    fn tag(&self, env: &mut Map<Position>) -> Result<Self::Tagged, Vec<String>> {
+        unreachable!()
+    }
+}
+
+impl Tagged<Position> for TaggedFunctionCall<Position> {
+    type Untagged = FunctionCall;
+    fn get_tag(&self) -> Box<Position> {
+        Box::new(self.tag.clone())
+    }
+    fn untag(&self) -> FunctionCall {
+        FunctionCall {
+            name: self.clone().name,
+        }
+    }
+}
+
+impl WithTag<Position> for Term {
+    type Tagged = TaggedTerm<Position>;
+    fn tag(&self, env: &mut Map<Position>) -> Result<Self::Tagged, Vec<String>> {
+        unreachable!()
+    }
+}
+
+impl Tagged<Position> for TaggedTerm<Position> {
+    type Untagged = Term;
+    fn get_tag(&self) -> Box<Position> {
+        use self::TaggedTerm::*;
+        match *self {
+            Literal(ref tag, _) => Box::new(tag.clone()),
+            Var(ref tag, _) => Box::new(tag.clone()),
+            Infix(ref tag, _, _, _) => Box::new(tag.clone()),
+            Call(ref tag, _, _) => Box::new(tag.clone()),
+            Scope(ref tag, _) => Box::new(tag.clone()),
+            If(ref tag, _, _, _) => Box::new(tag.clone()),
+            While(ref tag, _, _) => Box::new(tag.clone()),
+            Stmt(ref block) => {
+                unreachable!()
+            }
+        }
+    }
+    fn untag(&self) -> Term {
+        match *self {
+            TaggedTerm::Literal(_, num) => Term::Literal(num),
+            TaggedTerm::Var(_, ref name) => Term::Var(name.clone()),
+            TaggedTerm::Infix(_, ref left, op, ref right) =>
+                Term::Infix(
+                    Box::new(left.untag()), op, Box::new(right.untag())
+                ),
+            TaggedTerm::Call(_, ref func, ref args) => {
+                let args: Vec<Term> = args.iter().map(|arg| arg.untag()).collect();
+                Term::Call(func.untag(), args)
+            }
+            TaggedTerm::Scope(_, ref block) => Term::Scope(block.untag()),
+            TaggedTerm::If(_, ref if_clause, ref then_clause, ref else_clause) => {
+                Term::If(
+                    Box::new(if_clause.untag()),
+                    Box::new(then_clause.untag()),
+                    Box::new(else_clause.untag())
+                )
+            }
+            TaggedTerm::While(_, ref cond, ref block) => {
+                Term::While(Box::new(cond.untag()), block.untag())
+            }
+            TaggedTerm::Stmt(ref block) => {
+                Term::Stmt(Box::new(block.untag()))
+            }
+        }
+    }
+}
+
+impl WithTag<Position> for Statement {
+    type Tagged = TaggedStatement<Position>;
+    fn tag(&self, mut env: &mut Map<Position>) -> Result<Self::Tagged, Vec<String>> {
+        unreachable!()
+    }
+}
+
+impl Tagged<Position> for TaggedStatement<Position> {
+    type Untagged = Statement;
+    fn get_tag(&self) -> Box<Position> {
+        use self::TaggedStatement::*;
+        match *self {
+            TermSemicolon(ref ty, _) => Box::new(ty.clone()),
+            Let(ref ty, _, _) => Box::new(ty.clone()),
+            LetMut(ref ty, _, _) => Box::new(ty.clone()),
+            Mutate(ref ty, _, _) => Box::new(ty.clone()),
+            Extern(ref ty, _, _) => Box::new(ty.clone()),
+        }
+    }
+    fn untag(&self) -> Statement {
+        match *self {
+            TaggedStatement::TermSemicolon(_, ref term) => Statement::TermSemicolon(term.untag()),
+            TaggedStatement::Let(_, ref name, ref term) =>
+                Statement::Let(name.clone(), term.untag()),
+            TaggedStatement::LetMut(_, ref name, ref term) =>
+                Statement::LetMut(name.clone(), term.untag()),
+            TaggedStatement::Mutate(_, ref name, ref term) =>
+                Statement::Mutate(name.clone(), term.untag()),
+            TaggedStatement::Extern(_, ref name, ref ty) =>
+                Statement::Extern(name.clone(), ty.clone()),
+        }
+    }
+}
+
+impl WithTag<Position> for Block {
+    type Tagged = TaggedBlock<Position>;
+    fn tag(&self, mut env: &mut Map<Position>) -> Result<Self::Tagged, Vec<String>> {
+        unreachable!();
+    }
+}
+
+impl Tagged<Position> for TaggedBlock<Position> {
+    type Untagged = Block;
+    fn get_tag(&self) -> Box<Position> {
+        Box::new(self.tag.clone())
+    }
+    fn untag(&self) -> Block {
+        Block {
+            stmts: self.stmts.iter().map(TaggedStatement::untag).collect(),
+            end: Box::new(self.clone().end.map(|term| term.untag())),
+        }
+    }
+}
+
+impl WithTag<Position> for Program {
+    type Tagged = TaggedProgram<Position>;
+    fn tag(&self, env: &mut Map<Position>) -> Result<Self::Tagged, Vec<String>> {
+        unreachable!()
+    }
+}
+
+impl Tagged<Position> for TaggedProgram<Position> {
+    type Untagged = Program;
+    fn get_tag(&self) -> Box<Position> {
+        Box::new(self.tag.clone())
     }
     fn untag(&self) -> Program {
         Program {

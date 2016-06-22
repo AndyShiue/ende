@@ -26,7 +26,7 @@ pub fn main() {
     use ende::codegen::*;
     use ende::trans::*;
     use ende::ast::Position;
-    use ende::type_check::TaggedProgram;
+    use ende::type_check::{Tagged, TaggedProgram};
 
     let args : Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -58,7 +58,7 @@ pub fn main() {
         Err(err) => panic!("Failed to open input file: {}", err)
     };
     input.read_to_string(&mut input_data);
-    
+
     unsafe {
         haskell_init();
         let c_input = match CString::new(input_data) {
@@ -67,7 +67,7 @@ pub fn main() {
         };
         let tree_prim = ende::Parsing::parseProgram(c_input as *mut c_void);
         let block : TaggedProgram<Position> = FromHaskellRepr::from_haskell_repr(ende::HsClosureFunc::_deRefStablePtr(tree_prim) as *mut ende::HsClosureFunc::StgClosure);
-        let result = block.gen_module();
+        let result = block.untag().gen_module();
         println!("{:?}", result);
         let module = result.ok().unwrap();
         LLVMDumpModule(module.clone());

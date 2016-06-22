@@ -14,7 +14,7 @@ impl FromHaskellRepr for Position {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let con_name = get_constructor_desc(input_ref);
         use ast::Statement::*;
-        
+
         match con_name.as_str() {
             "base:GHC.Base.(,)" => {
                 Position {
@@ -44,9 +44,9 @@ impl<T1: FromHaskellRepr> FromHaskellRepr for Box<T1> {
 
 impl<T1: FromHaskellRepr> FromHaskellRepr for Option<T1> {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> Option<T1> {
-        let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));    
+        let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let con_name = get_constructor_desc(input_ref);
-        
+
         match con_name.as_str() {
             "base:GHC.Base.Just" => Some(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0))),
             "base:GHC.Base.Nothing" => None,
@@ -60,7 +60,7 @@ impl<T1: FromHaskellRepr> FromHaskellRepr for Vec<T1> {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         unsafe fn go<T1: FromHaskellRepr>(closure : *mut StgClosure, mut acc : Vec<T1>) -> Vec<T1> {
             let con_name = get_constructor_desc(closure);
-            
+
             match con_name.as_str() {
                 "ghc-prim:GHC.Types.:" => {
                     let t1 = FromHaskellRepr::from_haskell_repr(get_nth_payload(closure, 0));
@@ -73,14 +73,14 @@ impl<T1: FromHaskellRepr> FromHaskellRepr for Vec<T1> {
                 _ => panic!("to_rust_types: unrecognized constructor name: {}", con_name)
             }
         };
-        go(input_ref, Vec::<T1>::new())    
+        go(input_ref, Vec::<T1>::new())
     }
 }
 
 impl<T1: FromHaskellRepr> FromHaskellRepr for TaggedBlock<T1> {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> TaggedBlock<T1> {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
-        
+
         TaggedBlock {
             tag : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)),
             stmts : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1)),
@@ -94,7 +94,7 @@ impl<T1: FromHaskellRepr> FromHaskellRepr for TaggedStatement<T1> {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let con_name = get_constructor_desc(input_ref);
         use type_check::TaggedStatement::*;
-        
+
         match con_name.as_str() {
             "main:Ast.TermSemicolon" => TermSemicolon(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1))),
             "main:Ast.Let" => Let(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 2))),
@@ -111,7 +111,7 @@ impl<T1: FromHaskellRepr> FromHaskellRepr for TaggedTerm<T1> {
         use type_check::TaggedTerm::*;
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let con_name = get_constructor_desc(input_ref);
-        
+
         match con_name.as_str() {
             "main:Ast.Literal" => Literal(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1))),
             "main:Ast.Var" => Var(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1))),
@@ -131,8 +131,6 @@ impl<T1: FromHaskellRepr> FromHaskellRepr for TaggedFunctionCall<T1> {
         TaggedFunctionCall {
             tag : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)),
             name : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1)),
-            args_tags : unreachable!(),
-            ret_tag : unreachable!()
         }
     }
 }
@@ -140,7 +138,7 @@ impl<T1: FromHaskellRepr> FromHaskellRepr for TaggedFunctionCall<T1> {
 impl FromHaskellRepr for Program {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> Program {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
-        
+
         Program {
             main : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0))
         }
@@ -174,7 +172,7 @@ impl FromHaskellRepr for Term {
         use ast::Term::*;
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let con_name = get_constructor_desc(input_ref);
-        
+
         match con_name.as_str() {
             "main:Ast.Literal" => Literal(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0))),
             "main:Ast.Var" => Var(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0))),
@@ -192,7 +190,7 @@ impl FromHaskellRepr for u32 {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> u32 {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let name = get_constructor_desc(input_ref);
-        
+
         match name.as_str() {
             "ghc-prim:GHC.Types.I#" => get_nth_payload(input_ref, 0) as u32,
             _ => panic!("from_haskell_repr u32: unrecognized constructor name: {}", name)
@@ -204,7 +202,7 @@ impl FromHaskellRepr for i32 {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> i32 {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let name = get_constructor_desc(input_ref);
-        
+
         match name.as_str() {
             "ghc-prim:GHC.Types.I#" => get_nth_payload(input_ref, 0) as i32,
             _ => panic!("from_haskell_repr i32: unrecognized constructor name: {}", name)
@@ -222,7 +220,7 @@ impl FromHaskellRepr for char {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> char {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let name = get_constructor_desc(input_ref);
-        
+
         match name.as_str() {
             "ghc-prim:GHC.Types.C#" => {
                 get_nth_payload(input_ref, 0) as u8 as char
@@ -236,7 +234,7 @@ impl FromHaskellRepr for Type {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> Type {
         let input = _UNTAG_CLOSURE(deRefStgInd(i));
         let name = get_constructor_desc(input);
-        
+
         use type_check::Type::*;
         match name.as_str() {
             "main:Ast.Forbidden" => Forbidden,
@@ -252,7 +250,7 @@ impl FromHaskellRepr for Statement {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let con_name = get_constructor_desc(input_ref);
         use ast::Statement::*;
-        
+
         match con_name.as_str() {
             "main:Ast.TermSemicolon" => TermSemicolon(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0))),
             "main:Ast.Let" => Let(FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1))),
@@ -267,7 +265,7 @@ impl FromHaskellRepr for Statement {
 impl FromHaskellRepr for FunctionCall {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> FunctionCall {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
-        
+
         FunctionCall {
             name : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0))
         }
