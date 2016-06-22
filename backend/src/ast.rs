@@ -67,8 +67,8 @@ pub enum Statement {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Position {
-    pub start_pos: (i32, i32),
-    pub end_pos: (i32, i32),
+    pub start_pos: (u32, u32),
+    pub end_pos: (u32, u32),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

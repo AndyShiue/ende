@@ -16,16 +16,31 @@ impl FromHaskellRepr for Position {
         use ast::Statement::*;
 
         match con_name.as_str() {
-            "base:GHC.Base.(,)" => {
+            "main:Ast.Position" => {
                 Position {
-                    start_pos : (FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1))),
-                    end_pos : (FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1))),
+                    start_pos : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)),
+                    end_pos : FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0))
                 }
             },
             _ => panic!("from_haskell_repr Position: unrecognized constructor name: {}", con_name)
         }
     }
 }
+impl<T1: FromHaskellRepr, T2: FromHaskellRepr> FromHaskellRepr for (T1, T2) {
+    unsafe fn from_haskell_repr(i : *mut StgClosure) -> (T1, T2) {
+        let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
+        let con_name = get_constructor_desc(input_ref);
+        use ast::Statement::*;
+
+        match con_name.as_str() {
+            "ghc-prim:GHC.Tuple.(,)" => {
+                    (FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 0)), FromHaskellRepr::from_haskell_repr(get_nth_payload(input_ref, 1)))
+            },
+            _ => panic!("from_haskell_repr (T1, T2): unrecognized constructor name: {}", con_name)
+        }
+    }
+}
+
 impl<T1: FromHaskellRepr> FromHaskellRepr for TaggedProgram<T1> {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> TaggedProgram<T1> {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
@@ -192,7 +207,7 @@ impl FromHaskellRepr for u32 {
         let name = get_constructor_desc(input_ref);
 
         match name.as_str() {
-            "ghc-prim:GHC.Types.I#" => get_nth_payload(input_ref, 0) as u32,
+            "ghc-prim:GHC.Types.W#" => get_nth_payload(input_ref, 0) as u32,
             _ => panic!("from_haskell_repr u32: unrecognized constructor name: {}", name)
         }
     }
@@ -209,6 +224,7 @@ impl FromHaskellRepr for i32 {
         }
     }
 }
+
 impl FromHaskellRepr for String {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> String {
         let vec_char : Vec<char> = FromHaskellRepr::from_haskell_repr(i);
