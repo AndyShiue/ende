@@ -6,5 +6,4 @@ fn main() -> Unit {
       countdown = countdown - 1;
    };
    0
-}
-   
+};

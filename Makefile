@@ -9,5 +9,6 @@ clean:
 distclean:
 	make -C frontend clean
 	make -C backend distclean
+	rm -f inc.rs LLVM_BIN_PATH
 test:
 	make -C tests

@@ -44,6 +44,7 @@ pub enum Term {
     Scope(Block),
     If(Box<Term>, Box<Term>, Box<Term>),
     While(Box<Term>, Block),
+    Stmt(Box<Statement>),
 }
 
 #[macro_export]
@@ -62,6 +63,12 @@ pub enum Statement {
     LetMut(String, Term),
     Mutate(String, Term),
     Extern(String, Type),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Position {
+    pub start_pos: (u32, u32),
+    pub end_pos: (u32, u32),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -1,5 +1,12 @@
 #!/bin/bash
-if [ ! -e rust-bindgen ]; then
+LLVM_FOUND="no"
+LLVM_PATH=""
+LLVM_CONFIG_FOUND="no"
+LLVM_CONFIG_PATH=""
+LLVM_LLC_FOUND="no"
+LLVM_LLC_PATH=""
+if [ ! -e rust-bindgen/Cargo.toml ]; then
+  rm -rf rust-bindgen
   git clone https://github.com/crabtw/rust-bindgen.git
   if [ $? != 0 ]; then
     echo "Failed to clone rust-bindgen"
@@ -7,3 +14,52 @@ if [ ! -e rust-bindgen ]; then
   fi
 fi
 cd rust-bindgen && git checkout 0433980286a5264e3d69214aa42e314c37238cf6 && git reset --hard
+cd ../
+stack setup
+
+#llvm
+brew --prefix llvm >/dev/null 2>/dev/null
+if [ "$?" == 0 ]; then
+    LLVM_FOUND="yes"
+    LLVM_BIN_PATH=$(brew --prefix llvm)/bin
+    LLVM_CONFIG_PATH="$LLVM_BIN_PATH/llvm-config"
+    LLVM_LLC_PATH="$LLVM_BIN_PATH/llc"
+    if [ -x "$LLVM_CONFIG_PATH" ]; then
+	LLVM_CONFIG_FOUND="yes"
+    fi
+    if [ -x "$LLVM_LLC_PATH" ]; then
+	LLVM_LLC_FOUND="yes"
+    fi
+fi
+
+if [ "$LLVM_CONFIG_FOUND" == "no" ]; then
+    LLVM_CONFIG_PATH=$(whereis llvm-config | head -n 1 | grep bin | cut -d ' '  -f 2)
+    if [ -x "$LLVM_CONFIG_PATH" ]; then
+	LLVM_CONFIG_FOUND="yes"
+	LLVM_BIN_PATH=$(dirname $LLVM_CONFIG_PATH)
+	LLVM_FOUND="yes"
+    fi
+fi
+if [ "$LLVM_LLC_FOUND" == "no" ]; then
+    LLVM_LLC_PATH=$(whereis llc | head -n 1 | grep bin | cut -d ' '  -f 2)
+    if [ -x "$LLVM_LLC_PATH" ]; then
+	LLVM_LLC_FOUND="yes"
+    fi
+fi
+if [ ! -x $LLVM_CONFIG_PATH ]; then
+    echo "Failed to find llvm-config"
+    exit 1
+fi
+if [ ! -x $LLVM_LLC_PATH ]; then
+    echo "Failed to find llc"
+    exit 1
+fi
+echo "Path of llvm bin dir: ${LLVM_BIN_PATH}"
+echo "$LLVM_BIN_PATH" > LLVM_BIN_PATH
+echo "Path of llvm-config: ${LLVM_CONFIG_PATH}"
+echo "Path of llc: ${LLVM_LLC_PATH}"
+
+echo "" > inc.rs
+echo "pub const LLVM_CONFIG_PATH : &'static str = \"$LLVM_CONFIG_PATH\";" >> inc.rs
+echo "pub const LLVM_LLC_PATH : &'static str = \"$LLVM_LLC_PATH\";" >> inc.rs
+echo "pub const LLVM_BIN_PATH : &'static str = \"$LLVM_BIN_PATH\";" >> inc.rs

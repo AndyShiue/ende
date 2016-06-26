@@ -1,15 +1,14 @@
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 use std::collections::{HashSet, HashMap};
 use std::process::Command;
 
 use llvm_sys::prelude::*;
 use llvm_sys::core::*;
 
-use ast::*;
-use trans::to_rust_str;
 use type_check::*;
 use type_check::Type::*;
 
+use inc::*;
 trait ToRaw: Into<Vec<u8>> {
     fn to_raw(self) -> Result<*const c_char, Vec<String>>;
 }
@@ -38,51 +37,52 @@ pub struct EnvData {
     ty: Type,
 }
 
-impl Term {
-    pub fn rhs_vars(self: &Term) -> HashSet<String> {
-        use ast::Term::*;
+impl TaggedTerm<Type> {
+    pub fn rhs_vars(self: &Self) -> HashSet<String> {
+        use type_check::TaggedTerm::*;
         match *self {
-            Literal(_) => HashSet::new(),
-            Var(ref name) => {
+            Literal(_, _) => HashSet::new(),
+            Var(_, ref name) => {
                 let mut set = HashSet::new();
                 set.insert(name.clone());
                 set
             }
-            Infix(ref left, _, ref right) => left.rhs_vars()
+            Infix(_, ref left, _, ref right) => left.rhs_vars()
                                                  .union(&right.rhs_vars())
                                                  .cloned()
                                                  .collect(),
-            Call(_, ref args) =>
+            Call(_, _, ref args) =>
                 args.iter()
                     .map(|arg| arg.rhs_vars())
                     .fold(HashSet::new(), |l, r| l.union(&r).cloned().collect()),
-            Scope(ref block) => block.rhs_vars(),
-            If(ref cond, ref if_true, ref if_false) => {
+            Scope(_, ref block) => block.rhs_vars(),
+            If(_, ref cond, ref if_true, ref if_false) => {
                 let set: HashSet<_> =
                     cond.rhs_vars().union(&if_true.rhs_vars()).cloned().collect();
                 set.union(&if_false.rhs_vars()).cloned().collect()
             }
-            While(ref cond, ref block) =>
+            While(_, ref cond, ref block) =>
                 cond.rhs_vars().union(&block.rhs_vars()).cloned().collect(),
+            Stmt(ref stmt) => stmt.rhs_vars()
         }
     }
 }
 
-impl Statement {
-    pub fn rhs_vars(self: &Statement) -> HashSet<String> {
-        use ast::Statement::*;
+impl TaggedStatement<Type> {
+    pub fn rhs_vars(self: &Self) -> HashSet<String> {
+        use type_check::TaggedStatement::*;
         match *self {
-            TermSemicolon(ref term) => term.rhs_vars(),
-            Let(_, ref rhs) => rhs.rhs_vars(),
-            LetMut(_, ref rhs) => rhs.rhs_vars(),
-            Mutate(_, ref rhs) => rhs.rhs_vars(),
-            Extern(_, _) => HashSet::new(),
+            TermSemicolon(_, ref term) => term.rhs_vars(),
+            Let(_, _, ref rhs) => rhs.rhs_vars(),
+            LetMut(_, _, ref rhs) => rhs.rhs_vars(),
+            Mutate(_, _, ref rhs) => rhs.rhs_vars(),
+            Extern(_, _, _) => HashSet::new(),
         }
     }
 }
 
-impl Block {
-    pub fn rhs_vars(self: &Block) -> HashSet<String> {
+impl TaggedBlock<Type> {
+    pub fn rhs_vars(self: &Self) -> HashSet<String> {
         let stmts_rhs_vars = self.stmts
                                  .iter()
                                  .map(|stmt| stmt.rhs_vars())
@@ -95,18 +95,18 @@ impl Block {
     }
 }
 
-pub trait Compile: WithTag<Type> {
+pub trait Compile {
 
     type Env;
 
-    fn new_env() -> <Self as Compile>::Env;
+    fn new_env() -> Self::Env;
 
     fn build(self: &Self,
                     module: LLVMModuleRef,
                     func: LLVMValueRef,
                     entry: LLVMBasicBlockRef,
                     builder: LLVMBuilderRef,
-                    env: <Self as Compile>::Env) -> Result<LLVMValueRef, Vec<String>>;
+                    env: Self::Env) -> Result<LLVMValueRef, Vec<String>>;
 
     fn init_module(self: &Self,
                    module: LLVMModuleRef,
@@ -127,11 +127,6 @@ pub trait Compile: WithTag<Type> {
 
     fn gen_module(self: &Self) -> Result<LLVMModuleRef, Vec<String>> {
         unsafe {
-            // TODO: Refactor the whole codegen module to use typed AST.
-            let mut env = Map::new();
-            if let Err(err) = self.tag(&mut env) {
-                panic!("{:?}", err);
-            }
             let name = try!("Main".to_raw());
             let module = LLVMModuleCreateWithName(name);
             let args: &mut [LLVMTypeRef] = &mut [];
@@ -145,39 +140,39 @@ pub trait Compile: WithTag<Type> {
 
 }
 
-impl Compile for Term {
+impl Compile for TaggedTerm<Type> {
 
     type Env = Map<EnvData>;
 
-    fn new_env() -> <Self as Compile>::Env { Map::new() }
+    fn new_env() -> Self::Env { Map::new() }
 
-    fn build(self: &Term,
+    fn build(self: &Self,
              module: LLVMModuleRef,
              func: LLVMValueRef,
              entry: LLVMBasicBlockRef,
              builder: LLVMBuilderRef,
-             env: <Self as Compile>::Env) -> Result<LLVMValueRef, Vec<String>> {
-        use ast::Term::*;
+             env: Self::Env) -> Result<LLVMValueRef, Vec<String>> {
+        use type_check::TaggedTerm::*;
         unsafe {
             // Build the instructions.
             match *self {
-                Literal(i) => Ok(LLVMConstInt(LLVMIntType(32), i as u64, 0)),
-                Var(ref str) => {
+                Literal(_, i) => Ok(LLVMConstInt(LLVMIntType(32), i as u64, 0)),
+                Var(_, ref str) => {
                     match env.get(str) {
-                        Some(pair) => {
+                        Some(data) => {
                             use self::Direction::*;
-                            match pair.direction {
+                            match data.direction {
                                 Indirect => Ok(LLVMBuildLoad(
-                                    builder, pair.llvm_value, try!("load".to_raw())
+                                    builder, data.llvm_value, try!("load".to_raw())
                                 )),
-                                Direct => Ok(pair.llvm_value),
+                                Direct => Ok(data.llvm_value),
                             }
                         }
                         None =>
                             Err(vec![format!("Variable {} isn't declared yet.", str)]),
                     }
                 }
-                Infix(ref left, ref op, ref right) => {
+                Infix(_, ref left, ref op, ref right) => {
                     use ast::Operator::*;
                     let another_env = env.clone();
                     let left = try!(left.build(module, func, entry, builder, env));
@@ -197,7 +192,7 @@ impl Compile for Term {
                         )),
                     }
                 }
-                Call(ref func_call, ref args) => {
+                Call(_, ref func_call, ref args) => {
 
                     let ref name = func_call.name;
                     let llvm_func = if let Some(env_data) = env.get(name) {
@@ -268,14 +263,14 @@ impl Compile for Term {
                                              );
                     Ok(value)
                 }
-                Scope(ref block) => {
+                Scope(_, ref block) => {
                     let new_env = env.clone();
                     let block_result =
                         block.build(module, func, entry, builder, Box::new(new_env));
                     let block = try!(block_result);
                     Ok(block)
                 }
-                If(ref cond, ref if_true, ref if_false) => {
+                If(_, ref cond, ref if_true, ref if_false) => {
                     use self::Direction::*;
                     // Build the condition.
                     let built_cond = try!(cond.build(module, func, entry, builder, env.clone()));
@@ -398,7 +393,7 @@ impl Compile for Term {
                     new_env.insert(if_str.to_string(), env_data);
                     Ok(phi)
                 }
-                While(ref cond, ref block) => {
+                While(_, ref cond, ref block) => {
                     // Build the condition.
                     // It has to be done first because it could mutate variables.
                     let built_cond = try!(cond.build(module, func, entry, builder, env.clone()));
@@ -418,7 +413,7 @@ impl Compile for Term {
                     let mut new_env = env.clone();
                     // Build the phi nodes.
                     for (key, pair) in &env {
-                        if cond.rhs_vars().contains(&**key) {
+                        if cond.rhs_vars().contains(key) {
                             use self::Direction::*;
                             match pair.direction {
                                 Indirect => {
@@ -469,6 +464,7 @@ impl Compile for Term {
                     // Done.
                     Ok(zero)
                 }
+                Stmt(_) => unimplemented!()
             }
         }
     }
@@ -496,32 +492,32 @@ impl<'a> From<&'a Type> for LLVMTypeRef {
     }
 }
 
-impl Compile for Block {
+impl Compile for TaggedBlock<Type> {
 
     type Env = Box<Map<EnvData>>;
 
-    fn new_env() ->  <Self as Compile>::Env { Box::new(Map::new()) }
+    fn new_env() ->  Self::Env { Box::new(Map::new()) }
 
-    fn build(self: &Block,
+    fn build(self: &Self,
              module: LLVMModuleRef,
              func: LLVMValueRef,
              entry: LLVMBasicBlockRef,
              builder: LLVMBuilderRef,
-             mut env: <Self as Compile>::Env) -> Result<LLVMValueRef, Vec<String>> {
+             mut env: Self::Env) -> Result<LLVMValueRef, Vec<String>> {
+        use type_check::TaggedStatement::*;
         use self::Direction::*;
-        use ast::Statement::*;
         unsafe {
             for stmt in &self.stmts {
                 match *stmt {
-                    TermSemicolon(ref term) => {
+                    TermSemicolon(_, ref term) => {
                         try!(term.build(module, func, entry, builder, *env.clone()));
                     }
-                    Let(ref lhs, ref rhs) => {
+                    Let(_, ref lhs, ref rhs) => {
                         let value = try!(rhs.build(module, func, entry, builder, *env.clone()));
                         let env_data = EnvData { llvm_value: value, direction: Direct, ty: I32Ty };
                         env.insert(lhs.clone(), env_data);
                     }
-                    LetMut(ref lhs, ref rhs) => {
+                    LetMut(_, ref lhs, ref rhs) => {
                         let alloca =
                             LLVMBuildAlloca(builder, LLVMInt32Type(), lhs.as_ptr() as *const i8);
                         let built_rhs =
@@ -531,7 +527,7 @@ impl Compile for Block {
                             EnvData { llvm_value: alloca, direction: Indirect, ty: I32Ty };
                         env.insert(lhs.clone(), env_data);
                     }
-                    Mutate(ref lhs, ref rhs) => {
+                    Mutate(_, ref lhs, ref rhs) => {
                         let var_result = match env.get(lhs) {
                             Some(var) => Ok(var.clone()),
                             None => Err(
@@ -556,12 +552,12 @@ impl Compile for Block {
                                 ),
                         }
                     }
-                    Extern(ref name, ref ty) => {
+                    Extern(_, ref name, ref ty) => {
                         let func_ty = LLVMTypeRef::from(ty);
                         let func = LLVMAddFunction(
                             module,
                             // Actually unnessasary clone.
-                            try!(name.to_raw().map_err(|err| vec![err[0].clone()])),
+                            try!(name.to_raw().map_err(|err: Vec<String>| vec![err[0].clone()])),
                             func_ty
                         );
                         let env_data = EnvData {
@@ -584,18 +580,18 @@ impl Compile for Block {
     }
 }
 
-impl Compile for Program {
+impl Compile for TaggedProgram<Type> {
 
     type Env = Box<Map<EnvData>>;
 
-    fn new_env() ->  <Self as Compile>::Env { Box::new(Map::new()) }
+    fn new_env() -> Self::Env { Box::new(Map::new()) }
 
-    fn build(self: &Program,
+    fn build(self: &Self,
              module: LLVMModuleRef,
              func: LLVMValueRef,
              entry: LLVMBasicBlockRef,
              builder: LLVMBuilderRef,
-             env: <Self as Compile>::Env) -> Result<LLVMValueRef, Vec<String>> {
+             env: Self::Env) -> Result<LLVMValueRef, Vec<String>> {
         self.main.build(module, func, entry, builder, env)
     }
 }
@@ -612,13 +608,13 @@ pub unsafe fn emit_exe(output: String) {
     bc.push_str(".bc");
     let mut o = output.clone();
     o.push_str(".o");
-    let llc_output = Command::new("llc")
+    let llc_output = Command::new(LLVM_LLC_PATH)
         .arg(bc)
         .arg("--filetype=obj")
         .arg("-o")
         .arg(o.clone())
         .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+        .unwrap_or_else(|e| { panic!("failed to execute llc: {}", e) });
     println!("{}", String::from_utf8_lossy(&*llc_output.stdout));
     println!("{}", String::from_utf8_lossy(&*llc_output.stderr));
     let gcc_output = Command::new("gcc")
@@ -626,7 +622,7 @@ pub unsafe fn emit_exe(output: String) {
         .arg(output)
         .arg(o)
         .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+        .unwrap_or_else(|e| { panic!("failed to execute gcc: {}", e) });
     println!("{}", String::from_utf8_lossy(&*gcc_output.stdout));
     println!("{}", String::from_utf8_lossy(&*gcc_output.stderr));
 }

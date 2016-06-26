@@ -12,3 +12,7 @@ pub mod Parsing {
 pub mod HsClosureFunc {
     include!("../../frontend/hs_closure_func.rs");
 }
+#[allow(dead_code)]
+pub mod inc {
+    include!("../../inc.rs");
+}
