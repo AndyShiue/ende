@@ -13,7 +13,6 @@ impl FromHaskellRepr for Position {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> Position {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let con_name = get_constructor_desc(input_ref);
-        use ast::Statement::*;
 
         match con_name.as_str() {
             "main:Ast.Position" => {
@@ -30,7 +29,6 @@ impl<T1: FromHaskellRepr, T2: FromHaskellRepr> FromHaskellRepr for (T1, T2) {
     unsafe fn from_haskell_repr(i : *mut StgClosure) -> (T1, T2) {
         let input_ref = _UNTAG_CLOSURE(deRefStgInd(i));
         let con_name = get_constructor_desc(input_ref);
-        use ast::Statement::*;
 
         match con_name.as_str() {
             "ghc-prim:GHC.Tuple.(,)" => {

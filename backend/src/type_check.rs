@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 use std::fmt::Result as FmtResult;
-use std::collections::HashMap;
 
 use ast::*;
 use codegen::Map;
@@ -13,7 +12,6 @@ pub trait TypeCheck {
 pub trait Tagged<Tag: Clone> {
     type Untagged;
     fn get_tag(&self) -> Box<Tag>;
-    fn untag(&self) -> Self::Untagged;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -65,8 +63,7 @@ pub struct TaggedFunctionCall<Tag> {
 impl TypeCheck for TaggedFunctionCall<Position> {
     type Typed = TaggedFunctionCall<Type>;
     fn type_check(&self, env: &mut Map<Type>) -> Result<Self::Typed, Vec<String>> {
-        let untagged = self.untag();
-        let ref name = untagged.name;
+        let ref name = self.name;
         let func_ty =
             try!(env.get(name).ok_or(vec![format!("Function {} is undeclared.", name)]));
         match func_ty.clone() {
@@ -89,11 +86,6 @@ impl Tagged<Type> for TaggedFunctionCall<Type> {
     type Untagged = FunctionCall;
     fn get_tag(&self) -> Box<Type> {
         Box::new(self.tag.clone())
-    }
-    fn untag(&self) -> FunctionCall {
-        FunctionCall {
-            name: self.clone().name,
-        }
     }
 }
 
@@ -247,40 +239,12 @@ impl Tagged<Type> for TaggedTerm<Type> {
             Scope(ref tag, _) => Box::new(tag.clone()),
             If(ref tag, _, _, _) => Box::new(tag.clone()),
             While(ref tag, _, _) => Box::new(tag.clone()),
-            Stmt(ref block) => {
+            Stmt(_) => {
                 let unit_enum = Enumeration {
                     name: "Unit".to_string(),
                     variants: vec!["unit".to_string()]
                 };
                 Box::new(Type::Enum(unit_enum))
-            }
-        }
-    }
-    fn untag(&self) -> Term {
-        match *self {
-            TaggedTerm::Literal(_, num) => Term::Literal(num),
-            TaggedTerm::Var(_, ref name) => Term::Var(name.clone()),
-            TaggedTerm::Infix(_, ref left, op, ref right) =>
-                Term::Infix(
-                    Box::new(left.untag()), op, Box::new(right.untag())
-                ),
-            TaggedTerm::Call(_, ref func, ref args) => {
-                let args: Vec<Term> = args.iter().map(|arg| arg.untag()).collect();
-                Term::Call(func.untag(), args)
-            }
-            TaggedTerm::Scope(_, ref block) => Term::Scope(block.untag()),
-            TaggedTerm::If(_, ref if_clause, ref then_clause, ref else_clause) => {
-                Term::If(
-                    Box::new(if_clause.untag()),
-                    Box::new(then_clause.untag()),
-                    Box::new(else_clause.untag())
-                )
-            }
-            TaggedTerm::While(_, ref cond, ref block) => {
-                Term::While(Box::new(cond.untag()), block.untag())
-            }
-            TaggedTerm::Stmt(ref block) => {
-                Term::Stmt(Box::new(block.untag()))
             }
         }
     }
@@ -344,19 +308,6 @@ impl Tagged<Type> for TaggedStatement<Type> {
             Extern(ref ty, _, _) => Box::new(ty.clone()),
         }
     }
-    fn untag(&self) -> Statement {
-        match *self {
-            TaggedStatement::TermSemicolon(_, ref term) => Statement::TermSemicolon(term.untag()),
-            TaggedStatement::Let(_, ref name, ref term) =>
-                Statement::Let(name.clone(), term.untag()),
-            TaggedStatement::LetMut(_, ref name, ref term) =>
-                Statement::LetMut(name.clone(), term.untag()),
-            TaggedStatement::Mutate(_, ref name, ref term) =>
-                Statement::Mutate(name.clone(), term.untag()),
-            TaggedStatement::Extern(_, ref name, ref ty) =>
-                Statement::Extern(name.clone(), ty.clone()),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -403,12 +354,6 @@ impl Tagged<Type> for TaggedBlock<Type> {
     fn get_tag(&self) -> Box<Type> {
         Box::new(self.tag.clone())
     }
-    fn untag(&self) -> Block {
-        Block {
-            stmts: self.stmts.iter().map(TaggedStatement::untag).collect(),
-            end: Box::new(self.clone().end.map(|term| term.untag())),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -433,123 +378,5 @@ impl Tagged<Type> for TaggedProgram<Type> {
     type Untagged = Program;
     fn get_tag(&self) -> Box<Type> {
         Box::new(self.tag.clone())
-    }
-    fn untag(&self) -> Program {
-        Program {
-            main: self.main.untag()
-        }
-    }
-}
-
-// All the code below will be removed after compiling actually accept AST with position tags.
-
-impl Tagged<Position> for TaggedFunctionCall<Position> {
-    type Untagged = FunctionCall;
-    fn get_tag(&self) -> Box<Position> {
-        Box::new(self.tag.clone())
-    }
-    fn untag(&self) -> FunctionCall {
-        FunctionCall {
-            name: self.clone().name,
-        }
-    }
-}
-
-impl Tagged<Position> for TaggedTerm<Position> {
-    type Untagged = Term;
-    fn get_tag(&self) -> Box<Position> {
-        use self::TaggedTerm::*;
-        match *self {
-            Literal(ref tag, _) => Box::new(tag.clone()),
-            Var(ref tag, _) => Box::new(tag.clone()),
-            Infix(ref tag, _, _, _) => Box::new(tag.clone()),
-            Call(ref tag, _, _) => Box::new(tag.clone()),
-            Scope(ref tag, _) => Box::new(tag.clone()),
-            If(ref tag, _, _, _) => Box::new(tag.clone()),
-            While(ref tag, _, _) => Box::new(tag.clone()),
-            Stmt(ref block) => {
-                unreachable!()
-            }
-        }
-    }
-    fn untag(&self) -> Term {
-        match *self {
-            TaggedTerm::Literal(_, num) => Term::Literal(num),
-            TaggedTerm::Var(_, ref name) => Term::Var(name.clone()),
-            TaggedTerm::Infix(_, ref left, op, ref right) =>
-                Term::Infix(
-                    Box::new(left.untag()), op, Box::new(right.untag())
-                ),
-            TaggedTerm::Call(_, ref func, ref args) => {
-                let args: Vec<Term> = args.iter().map(|arg| arg.untag()).collect();
-                Term::Call(func.untag(), args)
-            }
-            TaggedTerm::Scope(_, ref block) => Term::Scope(block.untag()),
-            TaggedTerm::If(_, ref if_clause, ref then_clause, ref else_clause) => {
-                Term::If(
-                    Box::new(if_clause.untag()),
-                    Box::new(then_clause.untag()),
-                    Box::new(else_clause.untag())
-                )
-            }
-            TaggedTerm::While(_, ref cond, ref block) => {
-                Term::While(Box::new(cond.untag()), block.untag())
-            }
-            TaggedTerm::Stmt(ref block) => {
-                Term::Stmt(Box::new(block.untag()))
-            }
-        }
-    }
-}
-
-impl Tagged<Position> for TaggedStatement<Position> {
-    type Untagged = Statement;
-    fn get_tag(&self) -> Box<Position> {
-        use self::TaggedStatement::*;
-        match *self {
-            TermSemicolon(ref ty, _) => Box::new(ty.clone()),
-            Let(ref ty, _, _) => Box::new(ty.clone()),
-            LetMut(ref ty, _, _) => Box::new(ty.clone()),
-            Mutate(ref ty, _, _) => Box::new(ty.clone()),
-            Extern(ref ty, _, _) => Box::new(ty.clone()),
-        }
-    }
-    fn untag(&self) -> Statement {
-        match *self {
-            TaggedStatement::TermSemicolon(_, ref term) => Statement::TermSemicolon(term.untag()),
-            TaggedStatement::Let(_, ref name, ref term) =>
-                Statement::Let(name.clone(), term.untag()),
-            TaggedStatement::LetMut(_, ref name, ref term) =>
-                Statement::LetMut(name.clone(), term.untag()),
-            TaggedStatement::Mutate(_, ref name, ref term) =>
-                Statement::Mutate(name.clone(), term.untag()),
-            TaggedStatement::Extern(_, ref name, ref ty) =>
-                Statement::Extern(name.clone(), ty.clone()),
-        }
-    }
-}
-
-impl Tagged<Position> for TaggedBlock<Position> {
-    type Untagged = Block;
-    fn get_tag(&self) -> Box<Position> {
-        Box::new(self.tag.clone())
-    }
-    fn untag(&self) -> Block {
-        Block {
-            stmts: self.stmts.iter().map(TaggedStatement::untag).collect(),
-            end: Box::new(self.clone().end.map(|term| term.untag())),
-        }
-    }
-}
-
-impl Tagged<Position> for TaggedProgram<Position> {
-    type Untagged = Program;
-    fn get_tag(&self) -> Box<Position> {
-        Box::new(self.tag.clone())
-    }
-    fn untag(&self) -> Program {
-        Program {
-            main: self.main.untag()
-        }
     }
 }

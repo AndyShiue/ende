@@ -26,7 +26,7 @@ pub fn main() {
     use ende::codegen::*;
     use ende::trans::*;
     use ende::ast::Position;
-    use ende::type_check::{TypeCheck, Tagged, TaggedProgram};
+    use ende::type_check::{TypeCheck, TaggedProgram};
 
     let args : Vec<String> = env::args().collect();
     let program = args[0].clone();

@@ -1,12 +1,10 @@
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 use std::collections::{HashSet, HashMap};
 use std::process::Command;
 
 use llvm_sys::prelude::*;
 use llvm_sys::core::*;
 
-use ast::*;
-use trans::to_rust_str;
 use type_check::*;
 use type_check::Type::*;
 
@@ -465,7 +463,7 @@ impl Compile for TaggedTerm<Type> {
                     // Done.
                     Ok(zero)
                 }
-                Stmt(ref stmt) => unimplemented!()
+                Stmt(_) => unimplemented!()
             }
         }
     }
