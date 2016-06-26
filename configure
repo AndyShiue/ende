@@ -60,6 +60,6 @@ echo "Path of llvm-config: ${LLVM_CONFIG_PATH}"
 echo "Path of llc: ${LLVM_LLC_PATH}"
 
 echo "" > inc.rs
-echo "const LLVM_CONFIG_PATH : &'static str = \"$LLVM_CONFIG_PATH\";" >> inc.rs
-echo "const LLVM_LLC_PATH : &'static str = \"$LLVM_LLC_PATH\";" >> inc.rs
-echo "const LLVM_BIN_PATH : &'static str = \"$LLVM_BIN_PATH\";" >> inc.rs
+echo "pub const LLVM_CONFIG_PATH : &'static str = \"$LLVM_CONFIG_PATH\";" >> inc.rs
+echo "pub const LLVM_LLC_PATH : &'static str = \"$LLVM_LLC_PATH\";" >> inc.rs
+echo "pub const LLVM_BIN_PATH : &'static str = \"$LLVM_BIN_PATH\";" >> inc.rs

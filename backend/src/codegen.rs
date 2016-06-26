@@ -7,7 +7,8 @@ use llvm_sys::core::*;
 
 use type_check::*;
 use type_check::Type::*;
-include!("../../inc.rs");
+
+use inc::*;
 trait ToRaw: Into<Vec<u8>> {
     fn to_raw(self) -> Result<*const c_char, Vec<String>>;
 }

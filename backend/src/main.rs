@@ -57,7 +57,7 @@ pub fn main() {
         Ok(result) => result,
         Err(err) => panic!("Failed to open input file: {}", err)
     };
-    input.read_to_string(&mut input_data);
+    let _ = input.read_to_string(&mut input_data);
 
     unsafe {
         haskell_init();

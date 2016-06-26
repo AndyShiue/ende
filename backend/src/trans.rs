@@ -289,7 +289,7 @@ impl FromHaskellRepr for FunctionCall {
 pub unsafe fn to_rust_str(t : *const i8) -> String {
     from_utf8(CStr::from_ptr(t).to_bytes()).unwrap().to_string()
 }
-
+#[allow(non_snake_case)]
 pub unsafe fn deRefStgInd(mut input : *mut StgClosure) -> *mut StgClosure {
     while (input as u64) & 7 == 0 {
         input = (*(input as *mut StgInd)).indirectee;
