@@ -26,7 +26,7 @@ pub fn main() {
     use ende::codegen::*;
     use ende::trans::*;
     use ende::ast::Position;
-    use ende::type_check::{Tagged, TaggedProgram};
+    use ende::type_check::{TypeCheck, Tagged, TaggedProgram};
 
     let args : Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -67,7 +67,8 @@ pub fn main() {
         };
         let tree_prim = ende::Parsing::parseProgram(c_input as *mut c_void);
         let block : TaggedProgram<Position> = FromHaskellRepr::from_haskell_repr(ende::HsClosureFunc::_deRefStablePtr(tree_prim) as *mut ende::HsClosureFunc::StgClosure);
-        let result = block.untag().gen_module();
+        let mut env = Map::new();
+        let result = block.type_check(&mut env).unwrap().gen_module();
         println!("{:?}", result);
         let module = result.ok().unwrap();
         LLVMDumpModule(module.clone());
