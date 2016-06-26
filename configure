@@ -16,6 +16,7 @@ fi
 cd rust-bindgen && git checkout 0433980286a5264e3d69214aa42e314c37238cf6 && git reset --hard
 cd ../
 stack setup
+stack exec ghc -- --version
 
 #llvm
 brew --prefix llvm >/dev/null 2>/dev/null
@@ -63,3 +64,4 @@ echo "" > inc.rs
 echo "pub const LLVM_CONFIG_PATH : &'static str = \"$LLVM_CONFIG_PATH\";" >> inc.rs
 echo "pub const LLVM_LLC_PATH : &'static str = \"$LLVM_LLC_PATH\";" >> inc.rs
 echo "pub const LLVM_BIN_PATH : &'static str = \"$LLVM_BIN_PATH\";" >> inc.rs
+
