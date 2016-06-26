@@ -7,7 +7,7 @@ use llvm_sys::core::*;
 
 use type_check::*;
 use type_check::Type::*;
-
+include!("../../inc.rs");
 trait ToRaw: Into<Vec<u8>> {
     fn to_raw(self) -> Result<*const c_char, Vec<String>>;
 }
@@ -607,7 +607,7 @@ pub unsafe fn emit_exe(output: String) {
     bc.push_str(".bc");
     let mut o = output.clone();
     o.push_str(".o");
-    let llc_output = Command::new("llc")
+    let llc_output = Command::new(LLVM_LLC_PATH)
         .arg(bc)
         .arg("--filetype=obj")
         .arg("-o")
