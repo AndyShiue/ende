@@ -1,4 +1,6 @@
 *~
+*.o
+*.bc
 *#
 .DS_Store
 frontend/.stack-work/
@@ -28,3 +30,5 @@ rust-bindgen
 rust-bindgen/*
 backend/target/*
 backend/Cargo.lock
+LLVM_BIN_PATH
+inc.rs
