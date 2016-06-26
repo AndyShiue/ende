@@ -25,16 +25,9 @@ unsafe fn haskell_exit() {
 pub fn main() {
     use ende::codegen::*;
     use ende::trans::*;
-    /*
-    let stmt = LetMut("count".to_string(), Literal(10));
-    let cond_block = Block { stmts: vec![Mutate("count".to_string(), infix!(Var("count".to_string()), Sub, Literal(1)))],  end: Box::new(Var("count".to_string())) };
-    let cond_term = Scope(cond_block);
-    let a = vec![Var("count".to_string())];
-    let inner_block = Block { stmts: vec![], end: Box::new(Call(FunctionCall { name: "print".to_string() }, a )) };
-    let args_types = FunctionTy(vec![I32Ty], Box::new(I32Ty));
-    let stmts = vec![Extern("print".to_string(), args_types), stmt];
-    let stmt = Scope(Block { stmts: stmts, end: Box::new(While(Box::new(cond_term), inner_block)) });
-     */
+    use ende::ast::Position;
+    use ende::type_check::{TypeCheck, TaggedProgram};
+
     let args : Vec<String> = env::args().collect();
     let program = args[0].clone();
 
@@ -64,8 +57,8 @@ pub fn main() {
         Ok(result) => result,
         Err(err) => panic!("Failed to open input file: {}", err)
     };
-    input.read_to_string(&mut input_data);
-    
+    let _ = input.read_to_string(&mut input_data);
+
     unsafe {
         haskell_init();
         let c_input = match CString::new(input_data) {
@@ -73,8 +66,9 @@ pub fn main() {
             Err(err) => panic!("Failed to transform input data to c ptr: {}", err)
         };
         let tree_prim = ende::Parsing::parseProgram(c_input as *mut c_void);
-        let block = to_rust_program(ende::HsClosureFunc::_deRefStablePtr(tree_prim) as *mut ende::HsClosureFunc::StgClosure);
-        let result = block.gen_module();
+        let block : TaggedProgram<Position> = FromHaskellRepr::from_haskell_repr(ende::HsClosureFunc::_deRefStablePtr(tree_prim) as *mut ende::HsClosureFunc::StgClosure);
+        let mut env = Map::new();
+        let result = block.type_check(&mut env).unwrap().gen_module();
         println!("{:?}", result);
         let module = result.ok().unwrap();
         LLVMDumpModule(module.clone());

@@ -1,7 +1,10 @@
 *~
+*.o
+*.bc
 *#
 .DS_Store
 frontend/.stack-work/
+frontend/last_build
 frontend/all_pkg_path
 frontend/ghc_lib_path
 frontend/libAst.a
@@ -27,3 +30,5 @@ rust-bindgen
 rust-bindgen/*
 backend/target/*
 backend/Cargo.lock
+LLVM_BIN_PATH
+inc.rs
