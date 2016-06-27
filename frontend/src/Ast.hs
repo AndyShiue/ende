@@ -13,7 +13,8 @@ module Ast ( Position(..)
 
 import Control.DeepSeq
 import GHC.Generics
-type Params = [([Type], TypeMode)]
+type Param = Type
+type ParamList = [([Param], TypeMode)]
 type FunctionName = String
 type ImplObjName = String
 type RecordName = String
@@ -38,14 +39,13 @@ data Term t = Literal t Int
             | Scope t (Block t)
             | If t (Term t) (Term t) (Term t)
             | While t (Term t) (Block t)
-            | Stmt (Statement t)
             | Lam t (Lambda t)
               deriving (Show, Eq, Generic, NFData)
 
 data FunctionCall t = FunctionCall t String deriving (Show, Eq, Generic, NFData)
 
-data Function t = Function t FunctionName Params Type (Block t) deriving (Show, Eq, Generic, NFData)
-data Lambda t = Lambda t Params Type (Block t) deriving (Show, Eq, Generic, NFData)
+data Function t = Function t FunctionName ParamList Type (Block t) deriving (Show, Eq, Generic, NFData)
+data Lambda t = Lambda t ParamList Type (Block t) deriving (Show, Eq, Generic, NFData)
 data Statement t = TermSemicolon t (Term t)
                  | Let t String (Term t)
                  | LetMut t String (Term t)
@@ -56,7 +56,7 @@ data Statement t = TermSemicolon t (Term t)
 data Type = UnderScoreTy
           | VarTy String
           | WithColonTy Type Type
-          | FunctionTy Params Type
+          | FunctionTy ParamList Type
           deriving (Show, Eq, Generic, NFData)
 
 data Data t = Data t [Variant t]
