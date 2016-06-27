@@ -109,7 +109,7 @@ instance Tagged Term where
   getTag (Scope t _) = t
   getTag (If t _ _ _) = t
   getTag (While t _ _) = t
-  getTag (Stmt stmt) = getTag stmt
+
 
 instance Tagged FunctionCall where
   getTag (FunctionCall t _) = t
