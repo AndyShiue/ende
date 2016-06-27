@@ -212,8 +212,8 @@ block = do
   let pos = Position start (endPos endPosition)
   return $ Block pos stmts end
 
-program :: Parser (Program Position)
-program = do
+translationUnit :: Parser (TranslationUnit Position)
+translationUnit = do
   start <- getWordPair
   symbol "fn" <?> "fn"
   symbol "main" <?> "main"
@@ -224,21 +224,21 @@ program = do
   b <- block
   (_, scPos) <- semicolon
   let pos = Position start (endPos scPos)
-  return $ Program pos b
+  return $ TranslationUnit pos b
 
 -- TODO: Handle the error properly.
-toProgram :: String -> Program Position
-toProgram str = unwrap $ parse program "" str
+toTranslationUnit :: String -> TranslationUnit Position
+toTranslationUnit str = unwrap $ parse translationUnit "" str
  where
    unwrap (Left err) = error $ show err
    unwrap (Right term) = term
 
-program' :: Program Position
-program' = toProgram "fn main() -> Unit { extern print(I32) -> I32; let mut countdown = 100; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 };"
+translationUnit' :: TranslationUnit Position
+translationUnit' = toTranslationUnit "fn main() -> Unit { extern print(I32) -> I32; let mut countdown = 100; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 };"
 
-parseProgram :: CString -> IO (StablePtr (Program Position))
-parseProgram x = do
+parseTranslationUnit :: CString -> IO (StablePtr (TranslationUnit Position))
+parseTranslationUnit x = do
   str <- peekCString x
-  newStablePtr $!! toProgram str
+  newStablePtr $!! toTranslationUnit str
 
-foreign export ccall parseProgram :: CString -> IO (StablePtr (Program Position))
+foreign export ccall parseTranslationUnit :: CString -> IO (StablePtr (TranslationUnit Position))

@@ -63,7 +63,8 @@ data Data t = Data t [Variant t]
             | GADT t [GADTLikeVariant t]
               deriving (Show, Eq, Generic, NFData)
 data Variant t = Variant t String [Type] deriving (Show, Eq, Generic, NFData)
-data Decl t = DataDecl t (Data t)
+data Decl t = LangItemDecl t (LangItem t) (Decl t)
+            | DataDecl t (Data t)
             | FuncDecl t (Function t)
             | RecordDecl t (Record t)
             | ImplDecl t (Impl t)
@@ -71,10 +72,15 @@ data Decl t = DataDecl t (Data t)
 data GADTLikeVariant t = WithColonAnnotationVariant String Type
                        | FuncVariant String Type
                          deriving (Show, Eq, Generic, NFData)
-data Impl t = Impl ImplObjName RecordName [Type] ConstrName [(String, Term t)] deriving (Show, Eq, Generic, NFData)
-data Record t = Record t RecordName [Type] ConstrName [GADTLikeVariant t] deriving (Show, Eq, Generic, NFData)
+data Impl t = LangItemImpl t (LangItem t) (Impl t)
+            | Impl t ImplObjName RecordName [Type] ConstrName [(String, Term t)]
+              deriving (Show, Eq, Generic, NFData)
+data Record t = LangItemRecord t (LangItem t) (Record t)
+              | Record t RecordName [Type] ConstrName [GADTLikeVariant t]
+                deriving (Show, Eq, Generic, NFData)
 
-data Block t = Block { tag :: t
+data Block t = LangItemBlock t (LangItem t) (Block t)
+             | Block { tag :: t
                      , stmts :: [Statement t]
                      , end :: Maybe (Term t)
                      } deriving (Show, Eq, Generic, NFData)
@@ -83,7 +89,9 @@ data TopLevelDecl t = TopLevelDecl t (Decl t)
                     | TopLevelMod t (Mod t)
                     | TopLevelStmt t (Statement t)
                       deriving (Show, Eq, Generic, NFData)
-data Mod t = Mod t ModName [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
+data Mod t = LangItemMod t (LangItem t) (Mod t)
+           | Mod t ModName [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
+data LangItem t = LangItem t String deriving (Show, Eq, Generic, NFData)
 data TranslationUnitAttr t = TranslationUnitAttr deriving (Show, Eq, Generic, NFData)
 
 data TranslationUnit t = TranslationUnit t (TranslationUnitAttr t) [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
