@@ -39,7 +39,7 @@ data Term t = Literal t Int
             | If t (Term t) (Term t) (Term t)
             | While t (Term t) (Block t)
             | Stmt (Statement t)
-            | Lam t 
+            | Lam t (Lambda t)
               deriving (Show, Eq, Generic, NFData)
 
 data FunctionCall t = FunctionCall t String deriving (Show, Eq, Generic, NFData)
