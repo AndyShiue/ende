@@ -69,8 +69,8 @@ data Decl t = LangItemDecl t (LangItem t) (Decl t)
             | RecordDecl t (Record t)
             | ImplDecl t (Impl t)
               deriving (Show, Eq, Generic, NFData)
-data GADTLikeVariant t = WithColonAnnotationVariant String Type
-                       | FuncVariant String Type
+data GADTLikeVariant t = WithColonAnnotationVariant t String Type
+                       | FuncVariant t String Type
                          deriving (Show, Eq, Generic, NFData)
 data Impl t = LangItemImpl t (LangItem t) (Impl t)
             | Impl t ImplObjName RecordName [Type] ConstrName [(String, Term t)]
