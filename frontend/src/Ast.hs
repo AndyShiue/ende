@@ -2,17 +2,23 @@
 
 module Ast ( Position(..)
            , Operator(..)
-           , TaggedTerm(..)
-           , TaggedFunctionCall(..)
-           , TaggedStatement(..)
+           , Term(..)
+           , FunctionCall(..)
+           , Statement(..)
            , Type(..)
-           , TaggedBlock(..)
-           , TaggedProgram(..)
+           , Block(..)
+           , TranslationUnit(..)
            , getTag
            ) where
 
 import Control.DeepSeq
 import GHC.Generics
+
+data TypeMode = NormalMode
+              | ConstMode
+              | InstanceMode
+              | PiMode
+                deriving (Show, Eq, Generic, NFData)
 
 data Position = Position { startPos :: (Word, Word)
                          , endPos :: (Word, Word)
@@ -20,43 +26,64 @@ data Position = Position { startPos :: (Word, Word)
 
 data Operator = Add | Sub | Mul | Div deriving (Show, Eq, Generic, NFData)
 
-data TaggedTerm t = Literal t Int
-                  | Var t String
-                  | Infix t (TaggedTerm t) Operator (TaggedTerm t)
-                  | Call t (TaggedFunctionCall t) [TaggedTerm t]
-                  | Scope t (TaggedBlock t)
-                  | If t (TaggedTerm t) (TaggedTerm t) (TaggedTerm t)
-                  | While t (TaggedTerm t) (TaggedBlock t)
-                  | Stmt (TaggedStatement t)
-                  deriving (Show, Eq, Generic, NFData)
+data Term t = Literal t Int
+            | Var t String
+            | Infix t (Term t) Operator (Term t)
+            | Call t (FunctionCall t) [Term t]
+            | Scope t (Block t)
+            | If t (Term t) (Term t) (Term t)
+            | While t (Term t) (Block t)
+            | Stmt (Statement t)
+              deriving (Show, Eq, Generic, NFData)
 
-data TaggedFunctionCall t = TaggedFunctionCall t String deriving (Show, Eq, Generic, NFData)
+data FunctionCall t = FunctionCall t String deriving (Show, Eq, Generic, NFData)
 
-data TaggedStatement t = TermSemicolon t (TaggedTerm t)
-                       | Let t String (TaggedTerm t)
-                       | LetMut t String (TaggedTerm t)
-                       | Mutate t String (TaggedTerm t)
-                       | Extern t String Type
-                       deriving (Show, Eq, Generic, NFData)
+data Function t = Function t FunctionName [(Type, TypeMode)] Type (Block t) deriving (Show, Eq, Generic, NFData)
 
-data Type = Forbidden
-          | I32Ty
-          | FunctionTy [Type] Type
+data Statement t = TermSemicolon t (Term t)
+                 | Let t String (Term t)
+                 | LetMut t String (Term t)
+                 | Mutate t String (Term t)
+                 | Extern t String Type
+                   deriving (Show, Eq, Generic, NFData)
+
+data Type = UnderScoreTy
+          | VarTy String
+          | WithColonTy Type Type
+          | FunctionTy [([Type], TypeMode)] Type
           deriving (Show, Eq, Generic, NFData)
 
-data TaggedBlock t = TaggedBlock { tag :: t
-                                 , stmts :: [TaggedStatement t]
-                                 , end :: Maybe (TaggedTerm t)
-                                 } deriving (Show, Eq, Generic, NFData)
+data Data t = Data t [Variant t]
+            | GADT t [GADTLikeVariant t]
+data Variant t = Variant t String [Type]
+data Decl t = DataDecl t (Data t)
+            | FuncDecl t (Function t)
+            | RecordDecl t (Record t)
+            | ImplDecl t (Impl t)
 
-data TaggedProgram t = TaggedProgram t (TaggedBlock t) deriving (Show, Eq, Generic, NFData)
+data GADTLikeVariant t = WithColonAnnotationVariant String Type
+                       | FuncVariant String Type
+data Impl t = Impl ImplObjName RecordName [Type] ConstrName
+data Record t = Record t RecordName [Type] ConstrName [Either (Term t) (Function t)]
 
--- TODO: the code below should be rewritten using GHC's Generic in th future.
+data Block t = Block { tag :: t
+                     , stmts :: [Statement t]
+                     , end :: Maybe (Term t)
+                     } deriving (Show, Eq, Generic, NFData)
+
+data TopLevelDecl t = TopLevelDecl t (Decl t)
+                    | TopLevelMod t (Mod t)
+                    | TopLevelStmt t (Statement t)
+                      deriving (Show, Eq, Generic, NFData)
+
+data TranslationUnit t = TranslationUnit t (TranslationUnitAttr t) [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
+
+-- TODO: the code below should be rewritten using GHC's Generic in the future.
 
 class Tagged constr where
   getTag :: constr tag -> tag
 
-instance Tagged TaggedTerm where
+instance Tagged Term where
   getTag (Literal t _) = t
   getTag (Var t _) = t
   getTag (Ast.Infix t _ _ _) = t
@@ -66,15 +93,15 @@ instance Tagged TaggedTerm where
   getTag (While t _ _) = t
   getTag (Stmt stmt) = getTag stmt
 
-instance Tagged TaggedFunctionCall where
-  getTag (TaggedFunctionCall t _) = t
+instance Tagged FunctionCall where
+  getTag (FunctionCall t _) = t
 
-instance Tagged TaggedStatement where
+instance Tagged Statement where
   getTag (TermSemicolon t _) = t
   getTag (Let t _ _) = t
   getTag (LetMut t _ _) = t
   getTag (Mutate t _ _) = t
   getTag (Extern t _ _) = t
 
-instance Tagged TaggedBlock where
+instance Tagged Block where
   getTag block = tag block
