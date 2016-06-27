@@ -45,7 +45,7 @@ leftParen = symbol "(" <?> "left parenthesis"
 rightParen :: Parser (String, Position)
 rightParen = symbol ")" <?> "right parenthesis"
 
-literal :: Parser (TaggedTerm Position)
+literal :: Parser (Term Position)
 literal = do
   start <- getWordPair
   int <- Lexer.integer
@@ -56,24 +56,24 @@ literal = do
 identifier :: Parser String
 identifier = lexeme $ some letterChar
 
-var :: Parser (TaggedTerm Position)
+var :: Parser (Term Position)
 var = withPosition identifier >>= \(str, pos) -> return $ Var pos str
 
-functionCall :: Parser (TaggedTerm Position)
+functionCall :: Parser (Term Position)
 functionCall = do
   start <- getWordPair
-  name <- withPosition identifier >>= \(str, pos) -> return $ TaggedFunctionCall pos str
+  name <- withPosition identifier >>= \(str, pos) -> return $ FunctionCall pos str
   leftParen
   vars <- sepEndBy expr $ symbol ","
   (_, pair) <- rightParen
   let position = Position start (endPos pair)
   return $ Call position name vars
 
-scope :: Parser (TaggedTerm Position)
+scope :: Parser (Term Position)
 scope = do (b, pos) <- withPosition block
            return $ Scope pos b
 
-if_clause :: Parser (TaggedTerm Position)
+if_clause :: Parser (Term Position)
 if_clause = do
   start <- getWordPair
   symbol "if" <?> "if"
@@ -85,7 +85,7 @@ if_clause = do
   let pos = Position start (endPos $ getTag elsePart)
   return $ If pos cond thenPart elsePart
 
-while :: Parser (TaggedTerm Position)
+while :: Parser (Term Position)
 while = do
   start <- getWordPair
   symbol "while" <?> "while"
@@ -94,7 +94,7 @@ while = do
   let pos = Position start (endPos $ getTag b)
   return $ While pos t b
 
-term :: Parser (TaggedTerm Position)
+term :: Parser (Term Position)
 term =
    (try if_clause <?> "if clause") <|>
    (try while <?> "while loop") <|>
@@ -111,28 +111,28 @@ opToString Div = "/"
 
 -- TODO: Now only a dummy position is being tagged. Fix it.
 opToFunc :: Operator ->
-            TaggedTerm Position ->
-            TaggedTerm Position ->
-            TaggedTerm Position
+            Term Position ->
+            Term Position ->
+            Term Position
 opToFunc op = let dummyPosition = Position (1, 1) (1, 1)
               in \l r -> Infix dummyPosition l op r
 
-opToElement :: Operator -> Expr.Operator Parser (TaggedTerm Position)
+opToElement :: Operator -> Expr.Operator Parser (Term Position)
 opToElement op = Expr.InfixL $ opToFunc op <$ (symbol $ opToString op)
 
-table :: [[Expr.Operator Parser (TaggedTerm Position)]]
+table :: [[Expr.Operator Parser (Term Position)]]
 table = [ [ opToElement Mul
           , opToElement Div ]
         , [ opToElement Add
           , opToElement Sub ] ]
 
-expr :: Parser (TaggedTerm Position)
+expr :: Parser (Term Position)
 expr = Expr.makeExprParser term table
 
 semicolon :: Parser (String, Position)
 semicolon = symbol ";" <?> "semicolon"
 
-termSemicolon :: Parser (TaggedStatement Position)
+termSemicolon :: Parser (Statement Position)
 termSemicolon = do
   start <- getWordPair
   t <- expr
@@ -140,14 +140,14 @@ termSemicolon = do
   let pos = Position start (endPos scPos)
   return $ TermSemicolon pos t
 
-binding :: Parser (String, (TaggedTerm Position))
+binding :: Parser (String, (Term Position))
 binding = do
   var <- identifier <?> "variable name"
   symbol "=" <?> "equal sign"
   rhs <- expr
   return (var, rhs)
 
-letBinding :: Parser (TaggedStatement Position)
+letBinding :: Parser (Statement Position)
 letBinding = do
   start <- getWordPair
   symbol "let" <?> "let"
@@ -156,7 +156,7 @@ letBinding = do
   let pos = Position start (endPos scPos)
   return $ Let pos var rhs
 
-letMut :: Parser (TaggedStatement Position)
+letMut :: Parser (Statement Position)
 letMut = do
   start <- getWordPair
   symbol "let" <?> "let"
@@ -166,7 +166,7 @@ letMut = do
   let pos = Position start (endPos scPos)
   return $ LetMut pos var rhs
 
-mutate :: Parser (TaggedStatement Position)
+mutate :: Parser (Statement Position)
 mutate = do
   start <- getWordPair
   (var, rhs) <- binding
@@ -184,7 +184,7 @@ ty = do
   symbol "I32"
   return $ FunctionTy (replicate (length types) I32Ty) I32Ty
 
-extern_stmt :: Parser (TaggedStatement Position)
+extern_stmt :: Parser (Statement Position)
 extern_stmt = do
   start <- getWordPair
   symbol "extern" <?> "extern"
@@ -194,7 +194,7 @@ extern_stmt = do
   let pos = Position start (endPos scPos)
   return $ Extern pos fn args_ty
 
-statement :: Parser (TaggedStatement Position)
+statement :: Parser (Statement Position)
 statement =
   try letMut <|>
   extern_stmt <|>
@@ -202,7 +202,7 @@ statement =
   try mutate <|>
   try termSemicolon <?> "statement"
 
-block :: Parser (TaggedBlock Position)
+block :: Parser (Block Position)
 block = do
   start <- getWordPair
   symbol "{" <?> "left curly brace"
@@ -210,9 +210,9 @@ block = do
   end <- optional (expr <|> (Stmt <$> statement))
   (_, endPosition) <- symbol "}" <?> "right curly brace"
   let pos = Position start (endPos endPosition)
-  return $ TaggedBlock pos stmts end
+  return $ Block pos stmts end
 
-program :: Parser (TaggedProgram Position)
+program :: Parser (Program Position)
 program = do
   start <- getWordPair
   symbol "fn" <?> "fn"
@@ -224,21 +224,21 @@ program = do
   b <- block
   (_, scPos) <- semicolon
   let pos = Position start (endPos scPos)
-  return $ TaggedProgram pos b
+  return $ Program pos b
 
 -- TODO: Handle the error properly.
-toProgram :: String -> TaggedProgram Position
+toProgram :: String -> Program Position
 toProgram str = unwrap $ parse program "" str
  where
    unwrap (Left err) = error $ show err
    unwrap (Right term) = term
 
-program' :: TaggedProgram Position
+program' :: Program Position
 program' = toProgram "fn main() -> Unit { extern print(I32) -> I32; let mut countdown = 100; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 };"
 
-parseProgram :: CString -> IO (StablePtr (TaggedProgram Position))
+parseProgram :: CString -> IO (StablePtr (Program Position))
 parseProgram x = do
   str <- peekCString x
   newStablePtr $!! toProgram str
 
-foreign export ccall parseProgram :: CString -> IO (StablePtr (TaggedProgram Position))
+foreign export ccall parseProgram :: CString -> IO (StablePtr (Program Position))

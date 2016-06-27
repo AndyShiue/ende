@@ -13,7 +13,12 @@ module Ast ( Position(..)
 
 import Control.DeepSeq
 import GHC.Generics
-
+type Params = [([Type], TypeMode)]
+type FunctionName = String
+type ImplObjName = String
+type RecordName = String
+type ConstrName = String
+type ModName = String
 data TypeMode = NormalMode
               | ConstMode
               | InstanceMode
@@ -34,12 +39,13 @@ data Term t = Literal t Int
             | If t (Term t) (Term t) (Term t)
             | While t (Term t) (Block t)
             | Stmt (Statement t)
+            | Lam t 
               deriving (Show, Eq, Generic, NFData)
 
 data FunctionCall t = FunctionCall t String deriving (Show, Eq, Generic, NFData)
 
-data Function t = Function t FunctionName [(Type, TypeMode)] Type (Block t) deriving (Show, Eq, Generic, NFData)
-
+data Function t = Function t FunctionName Params Type (Block t) deriving (Show, Eq, Generic, NFData)
+data Lambda t = Lambda t Params Type (Block t) deriving (Show, Eq, Generic, NFData)
 data Statement t = TermSemicolon t (Term t)
                  | Let t String (Term t)
                  | LetMut t String (Term t)
@@ -50,21 +56,23 @@ data Statement t = TermSemicolon t (Term t)
 data Type = UnderScoreTy
           | VarTy String
           | WithColonTy Type Type
-          | FunctionTy [([Type], TypeMode)] Type
+          | FunctionTy Params Type
           deriving (Show, Eq, Generic, NFData)
 
 data Data t = Data t [Variant t]
             | GADT t [GADTLikeVariant t]
-data Variant t = Variant t String [Type]
+              deriving (Show, Eq, Generic, NFData)
+data Variant t = Variant t String [Type] deriving (Show, Eq, Generic, NFData)
 data Decl t = DataDecl t (Data t)
             | FuncDecl t (Function t)
             | RecordDecl t (Record t)
             | ImplDecl t (Impl t)
-
+              deriving (Show, Eq, Generic, NFData)
 data GADTLikeVariant t = WithColonAnnotationVariant String Type
                        | FuncVariant String Type
-data Impl t = Impl ImplObjName RecordName [Type] ConstrName
-data Record t = Record t RecordName [Type] ConstrName [Either (Term t) (Function t)]
+                         deriving (Show, Eq, Generic, NFData)
+data Impl t = Impl ImplObjName RecordName [Type] ConstrName [(String, Term t)] deriving (Show, Eq, Generic, NFData)
+data Record t = Record t RecordName [Type] ConstrName [GADTLikeVariant t] deriving (Show, Eq, Generic, NFData)
 
 data Block t = Block { tag :: t
                      , stmts :: [Statement t]
@@ -75,6 +83,8 @@ data TopLevelDecl t = TopLevelDecl t (Decl t)
                     | TopLevelMod t (Mod t)
                     | TopLevelStmt t (Statement t)
                       deriving (Show, Eq, Generic, NFData)
+data Mod t = Mod t ModName [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
+data TranslationUnitAttr t = TranslationUnitAttr deriving (Show, Eq, Generic, NFData)
 
 data TranslationUnit t = TranslationUnit t (TranslationUnitAttr t) [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
 
