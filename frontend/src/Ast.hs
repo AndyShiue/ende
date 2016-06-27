@@ -13,7 +13,7 @@ module Ast ( Position(..)
 
 import Control.DeepSeq
 import GHC.Generics
-import Debug.Trace
+
 type Param = Type
 type ParamList = [([Param], TypeMode)]
 type FunctionName = String
@@ -95,8 +95,6 @@ data TranslationUnitAttr t = TranslationUnitAttr deriving (Show, Eq, Generic, NF
 
 data TranslationUnit t = TranslationUnit t (TranslationUnitAttr t) [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
 
--- TODO: the code below should be rewritten using GHC's Generic in the future.
-
 class GTagged (tag :: *) (f :: * -> *) where
     gGetTag :: f p -> tag
 
@@ -123,7 +121,7 @@ instance GTagged tag (K1 r tag1) where
     gGetTag = undefined
 
 class Tagged constr where
-  getTag :: Show tag => constr tag -> tag
+  getTag :: constr tag -> tag
   default getTag :: (Generic (constr tag), GTagged tag (Rep (constr tag))) => constr tag -> tag
   getTag x = gGetTag $ from x
 
