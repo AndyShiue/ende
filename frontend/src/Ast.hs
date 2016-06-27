@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DefaultSignatures, TypeOperators, FlexibleContexts, TypeSynonymInstances, FlexibleInstances, KindSignatures, MultiParamTypeClasses, OverlappingInstances, IncoherentInstances #-}
 
 module Ast ( Position(..)
            , Operator(..)
@@ -13,6 +13,7 @@ module Ast ( Position(..)
 
 import Control.DeepSeq
 import GHC.Generics
+import Debug.Trace
 type Param = Type
 type ParamList = [([Param], TypeMode)]
 type FunctionName = String
@@ -80,10 +81,8 @@ data Record t = LangItemRecord t (LangItem t) (Record t)
                 deriving (Show, Eq, Generic, NFData)
 
 data Block t = LangItemBlock t (LangItem t) (Block t)
-             | Block { tag :: t
-                     , stmts :: [Statement t]
-                     , end :: Maybe (Term t)
-                     } deriving (Show, Eq, Generic, NFData)
+             | Block t [Statement t] (Maybe (Term t))
+               deriving (Show, Eq, Generic, NFData)
 
 data TopLevelDecl t = TopLevelDecl t (Decl t)
                     | TopLevelMod t (Mod t)
@@ -98,28 +97,38 @@ data TranslationUnit t = TranslationUnit t (TranslationUnitAttr t) [TopLevelDecl
 
 -- TODO: the code below should be rewritten using GHC's Generic in the future.
 
+class GTagged (tag :: *) (f :: * -> *) where
+    gGetTag :: f p -> tag
+
+
+instance (GTagged tag a, GTagged tag b) => GTagged tag (a :*: b) where
+    gGetTag (a :*: b) = gGetTag a
+
+instance (GTagged tag a, GTagged tag b) => GTagged tag (a :+: b) where
+    gGetTag (L1 x) = gGetTag x
+    gGetTag (R1 x) = gGetTag x
+
+instance (GTagged tag a) => GTagged tag (D1 c a) where
+    gGetTag (M1 x) = gGetTag x
+
+instance GTagged tag a => GTagged tag (C1 c a) where
+    gGetTag (M1 x) = gGetTag x
+
+instance GTagged tag a => GTagged tag (S1 c a) where
+    gGetTag (M1 x) = gGetTag x
+
+instance GTagged tag (K1 r tag) where
+    gGetTag (K1 x) = x
+instance GTagged tag (K1 r tag1) where
+    gGetTag = undefined
+
 class Tagged constr where
-  getTag :: constr tag -> tag
+  getTag :: Show tag => constr tag -> tag
+  default getTag :: (Generic (constr tag), GTagged tag (Rep (constr tag))) => constr tag -> tag
+  getTag x = gGetTag $ from x
 
-instance Tagged Term where
-  getTag (Literal t _) = t
-  getTag (Var t _) = t
-  getTag (Ast.Infix t _ _ _) = t
-  getTag (Call t _ _) = t
-  getTag (Scope t _) = t
-  getTag (If t _ _ _) = t
-  getTag (While t _ _) = t
+instance Tagged Term
+instance Tagged FunctionCall
+instance Tagged Statement
+instance Tagged Block
 
-
-instance Tagged FunctionCall where
-  getTag (FunctionCall t _) = t
-
-instance Tagged Statement where
-  getTag (TermSemicolon t _) = t
-  getTag (Let t _ _) = t
-  getTag (LetMut t _ _) = t
-  getTag (Mutate t _ _) = t
-  getTag (Extern t _ _) = t
-
-instance Tagged Block where
-  getTag block = tag block
