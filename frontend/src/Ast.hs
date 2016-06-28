@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DefaultSignatures, TypeOperators, FlexibleContexts, TypeSynonymInstances, FlexibleInstances, KindSignatures, MultiParamTypeClasses, OverlappingInstances, IncoherentInstances #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DefaultSignatures, TypeOperators, FlexibleContexts, TypeSynonymInstances, FlexibleInstances, KindSignatures, MultiParamTypeClasses, IncoherentInstances #-}
 
 module Ast ( Position(..)
            , Operator(..)
@@ -115,8 +115,9 @@ instance GTagged tag a => GTagged tag (C1 c a) where
 instance GTagged tag a => GTagged tag (S1 c a) where
     gGetTag (M1 x) = gGetTag x
 
-instance GTagged tag (K1 r tag) where
+instance {-# OVERLAPPABLE #-} GTagged tag (K1 r tag) where
     gGetTag (K1 x) = x
+
 instance GTagged tag (K1 r tag1) where
     gGetTag = undefined
 
@@ -127,6 +128,18 @@ class Tagged constr where
 
 instance Tagged Term
 instance Tagged FunctionCall
+instance Tagged Function
+instance Tagged Lambda
 instance Tagged Statement
+instance Tagged Data
+instance Tagged Variant
+instance Tagged Decl
+instance Tagged GADTLikeVariant
+instance Tagged Impl
+instance Tagged Record
+instance Tagged TopLevelDecl
+instance Tagged Mod
+instance Tagged LangItem
 instance Tagged Block
+instance Tagged TranslationUnit
 
