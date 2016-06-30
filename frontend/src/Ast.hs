@@ -15,6 +15,10 @@ import Control.DeepSeq
 import GHC.Generics
 
 type Param = Type
+data Visibility = Pub
+                | NonPub
+data Constness = Const
+               | NonConst
 type ParamList = [([Param], TypeMode)]
 type FunctionName = String
 type ImplObjName = String
@@ -45,7 +49,7 @@ data Term t = Literal t Int
 
 data FunctionCall t = FunctionCall t String deriving (Show, Eq, Generic, NFData)
 
-data Function t = Function t FunctionName ParamList Type (Block t) deriving (Show, Eq, Generic, NFData)
+data Function t = Function t Visibility Constness FunctionName ParamList Type (Block t) deriving (Show, Eq, Generic, NFData)
 data Lambda t = Lambda t ParamList Type (Block t) deriving (Show, Eq, Generic, NFData)
 data Statement t = TermSemicolon t (Term t)
                  | Let t String (Term t)
@@ -74,10 +78,10 @@ data GADTLikeVariant t = WithColonAnnotationVariant t String Type
                        | FuncVariant t String Type
                          deriving (Show, Eq, Generic, NFData)
 data Impl t = LangItemImpl t (LangItem t) (Impl t)
-            | Impl t ImplObjName RecordName [Type] ConstrName [(String, Term t)]
+            | Impl t Visibility ImplObjName RecordName [Type] ConstrName [(String, Term t)]
               deriving (Show, Eq, Generic, NFData)
 data Record t = LangItemRecord t (LangItem t) (Record t)
-              | Record t RecordName [Type] ConstrName [GADTLikeVariant t]
+              | Record t Visibility RecordName [Type] ConstrName [GADTLikeVariant t]
                 deriving (Show, Eq, Generic, NFData)
 
 data Block t = LangItemBlock t (LangItem t) (Block t)
@@ -89,7 +93,7 @@ data TopLevelDecl t = TopLevelDecl t (Decl t)
                     | TopLevelStmt t (Statement t)
                       deriving (Show, Eq, Generic, NFData)
 data Mod t = LangItemMod t (LangItem t) (Mod t)
-           | Mod t ModName [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
+           | Mod t Visibility ModName [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
 data LangItem t = LangItem t String deriving (Show, Eq, Generic, NFData)
 data TranslationUnitAttr t = TranslationUnitAttr deriving (Show, Eq, Generic, NFData)
 
