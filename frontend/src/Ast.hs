@@ -95,9 +95,8 @@ data TopLevelDecl t = TopLevelDecl t (Decl t)
 data Mod t = LangItemMod t (LangItem t) (Mod t)
            | Mod t Visibility ModName [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
 data LangItem t = LangItem t String deriving (Show, Eq, Generic, NFData)
-data TranslationUnitAttr t = TranslationUnitAttr deriving (Show, Eq, Generic, NFData)
 
-data TranslationUnit t = TranslationUnit t (TranslationUnitAttr t) [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
+data TranslationUnit t = TranslationUnit t [TopLevelDecl t] deriving (Show, Eq, Generic, NFData)
 
 class GTagged (tag :: *) (f :: * -> *) where
     gGetTag :: f p -> tag
