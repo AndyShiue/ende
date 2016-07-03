@@ -11,9 +11,12 @@ import Control.Monad (void)
 import Control.DeepSeq (($!!))
 import Text.Megaparsec hiding (space)
 import Text.Megaparsec.String
+import Text.Megaparsec.Perm
 import qualified Text.Megaparsec.Expr as Expr
 import qualified Text.Megaparsec.Lexer as Lexer
 
+import Prelude hiding (mod)
+    
 import Ast
 
 toTuple :: SourcePos -> (Word, Word)
@@ -59,6 +62,15 @@ identifier = lexeme $ some letterChar
 var :: Parser (Term Position)
 var = withPosition identifier >>= \(str, pos) -> return $ Var pos str
 
+stringLiteral :: Parser (String, Position)
+stringLiteral = do
+  start <- getWordPair
+  char '"'
+  r <- manyTill Lexer.charLiteral $ char '"'
+  end <- getWordPair
+  space
+  return $ (r, Position start end)
+      
 functionCall :: Parser (Term Position)
 functionCall = do
   start <- getWordPair
@@ -174,15 +186,8 @@ mutate = do
   let pos = Position start (endPos scPos)
   return $ Mutate pos var rhs
 
--- TODO: This is a stub. Fix it.
-ty :: Parser Type
-ty = do
-  symbol "("
-  types <- symbol "I32" `sepEndBy` symbol ","
-  symbol ")"
-  symbol "->"
-  symbol "I32"
-  return $ FunctionTy (replicate (length types) I32Ty) I32Ty
+
+
 
 extern_stmt :: Parser (Statement Position)
 extern_stmt = do
@@ -207,34 +212,278 @@ block = do
   start <- getWordPair
   symbol "{" <?> "left curly brace"
   stmts <- many statement
-  end <- optional (expr <|> (Stmt <$> statement))
+  end <- optional expr
   (_, endPosition) <- symbol "}" <?> "right curly brace"
   let pos = Position start (endPos endPosition)
   return $ Block pos stmts end
 
+topLevelDecl :: Parser (TopLevelDecl Position)
+topLevelDecl =
+    try topLevelDecl' <|>
+    try topLevelMod <|>
+    try topLevelStmt
+
+topLevelDecl' :: Parser (TopLevelDecl Position)
+topLevelDecl' = do
+  d <- decl
+  return $ TopLevelDecl (getTag d) d
+
+topLevelMod :: Parser (TopLevelDecl Position)
+topLevelMod = do
+  m <- mod
+  return $ TopLevelMod (getTag m) m
+         
+topLevelStmt :: Parser (TopLevelDecl Position)
+topLevelStmt = do
+  s <- statement
+  return $ TopLevelStmt (getTag s) s
+
+langItem :: Parser (LangItem Position)
+langItem = do
+  start <- getWordPair
+  symbol "@lang"
+  leftParen
+  (lit, pos) <- stringLiteral
+  rightParen
+  symbol ":"
+  end <- getWordPair
+  return $ LangItem (Position start end) lit
+         
+decl :: Parser (Decl Position)
+decl =
+    langItemDecl <|>
+    dataDecl <|>
+    funcDecl <|>
+    recordDecl <|>
+    implDecl
+
+langItemDecl :: Parser (Decl Position)
+langItemDecl = do
+  start <- getWordPair
+  li <- langItem
+  d <- decl
+  return $ LangItemDecl (Position start (endPos $ getTag d)) li d
+
+dataDecl :: Parser (Decl Position)
+dataDecl = do
+  start <- getWordPair
+  d <- data'
+  return $ DataDecl (Position start (endPos $ getTag d)) d
+
+funcDecl :: Parser (Decl Position)
+funcDecl = do
+  start <- getWordPair
+  f <- function
+  return $ FuncDecl (Position start (endPos $ getTag f)) f
+
+recordDecl :: Parser (Decl Position)
+recordDecl = do
+  start <- getWordPair
+  r <- record
+  return $ RecordDecl (Position start (endPos $ getTag r)) r
+
+implDecl :: Parser (Decl Position)
+implDecl = do
+  start <- getWordPair
+  i <- impl
+  return $ ImplDecl (Position start (endPos $ getTag i)) i
+
+data' :: Parser (Data Position)
+data' = do
+  start <- getWordPair
+  symbol "data"
+  id <- identifier <?> "identifier"
+  tl <- optional typeList
+  dataNormal start id tl <|> dataGADT start id tl
+
+dataNormal :: (Word, Word) -> String -> Maybe TypeList -> Parser (Data Position)
+dataNormal start id tl = do
+  symbol "="
+  variants <- flip sepEndBy (symbol ",") $ do
+                           start <- getWordPair
+                           id <- identifier
+                           end <- getWordPair
+                           return $ Variant (Position start end) id []
+  end <- getWordPair
+  return $ Data (Position start end) id tl variants
+dataGADT :: (Word, Word) -> String -> Maybe TypeList -> Parser (Data Position)
+dataGADT  start id tl = do
+  symbol "{"
+  variants <- flip sepEndBy (symbol ",") $
+                        gadtFnVariant <|>
+                        gadtColonVariant
+
+  symbol "}"
+  end <- getWordPair
+  return $ GADT (Position start end) id tl variants
+gadtFnVariant :: Parser (GADTLikeVariant Position)
+gadtFnVariant = do
+  start <- getWordPair
+  symbol "fn"
+  id <- identifier
+  tl <- typeList
+  symbol "->"
+  retTy <- ty
+  end <- getWordPair
+  return $ FuncVariant (Position start end) id tl retTy
+
+gadtColonVariant :: Parser (GADTLikeVariant Position)
+gadtColonVariant = do
+  start <- getWordPair
+  id <- identifier
+  symbol ":"
+  t <- ty
+  end <- getWordPair
+  return $ WithColonAnnotationVariant (Position start end) id t
+  
 translationUnit :: Parser (TranslationUnit Position)
 translationUnit = do
   start <- getWordPair
-  symbol "fn" <?> "fn"
-  symbol "main" <?> "main"
-  leftParen
-  rightParen
-  symbol "->" <?> "arrow"
-  symbol "Unit" <?> "Unit"
-  b <- block
-  (_, scPos) <- semicolon
-  let pos = Position start (endPos scPos)
-  return $ TranslationUnit pos b
+  tld <- many topLevelDecl
+  end <- getWordPair
+  let pos = Position start end
+  return $ TranslationUnit pos tld
 
+function :: Parser (Function Position)
+function = do
+  start <- getWordPair
+  pub <- fmap (\x -> case x of
+                       Just _ -> Pub
+                       Nothing -> NonPub) $ optional $ symbol "pub"
+  const <- fmap (\x -> case x of
+                         Just _ -> Const
+                         Nothing -> NonConst) $ optional $ symbol "const"
+  symbol "fn"
+  id <- identifier
+  tl <- typeList
+  symbol "->"
+  t <- ty
+  functionNormal start pub const id tl t <|> functionPatternMatch start pub const id tl t
+
+functionNormal :: (Word, Word) -> Visibility -> Constness -> String -> TypeList -> RetType -> Parser (Function Position)
+functionNormal start vis con id tl ret = do
+  symbol "="
+  b <- block
+  end <- getWordPair
+  return $ Function (Position start end) vis con id tl ret b
+
+branch :: Parser (Branch Position)
+branch = do
+  start <- getWordPair
+  p <- pat
+  symbol "=>"
+  t <- term
+  end <- getWordPair
+  return $ Branch (Position start end) p t       
+
+         
+functionPatternMatch :: (Word, Word) -> Visibility -> Constness -> String -> TypeList -> RetType -> Parser (Function Position)
+functionPatternMatch start vis con id tl ret = do
+  symbol "{"
+  p <- sepEndBy branch (symbol ",") 
+  symbol "}"
+  end <- getWordPair
+  return $ FunctionPatternMatch (Position start end) vis con id tl ret p
+
+record :: Parser (Record Position)
+record = langItemRecord <|> record'
+
+langItemRecord :: Parser (Record Position)
+langItemRecord = do
+  start <- getWordPair
+  l <- langItem
+  r <- record
+  end <- getWordPair
+  return $ LangItemRecord (Position start end) l r
+         
+record' :: Parser (Record Position)
+record' = do
+  start <- getWordPair
+  pub <- fmap (\x -> case x of
+                       Just _ -> Pub
+                       Nothing -> NonPub) $ optional $ symbol "pub"
+  symbol "record"
+  id <- identifier
+  tl <- typeList
+  symbol "="
+  constrName <- identifier
+  variants <- flip sepEndBy (symbol ",") $
+                        gadtFnVariant <|>
+                        gadtColonVariant
+  end <- getWordPair
+  return $ Record (Position start end) pub id tl constrName variants
+
+impl :: Parser (Impl Position)
+impl = langItemImpl <|> implObj
+
+langItemImpl :: Parser (Impl Position)
+langItemImpl = do
+  start <- getWordPair
+  l <- langItem
+  i <- impl
+  end <- getWordPair
+  return $ LangItemImpl (Position start end) l i
+
+implObj :: Parser (Impl Position)
+implObj = do
+  start <- getWordPair
+  pub <- fmap (\x -> case x of
+                       Just _ -> Pub
+                       Nothing -> NonPub) $ optional $ symbol "pub"
+  symbol "impl"
+  objName <- identifier
+  symbol ":"
+  recordName <- identifier
+  tl <- typeList
+  symbol "="
+  constrName <- identifier
+  symbol "{"
+  b <- sepEndBy branch (symbol ",")
+  symbol "}"
+  symbol ";"
+  end <- getWordPair
+  return $ ImplObj (Position start end) pub objName recordName tl constrName b
+
+mod :: Parser (Mod Position)
+mod = langItemMod <|> mod'
+
+langItemMod :: Parser (Mod Position)
+langItemMod = do
+  start <- getWordPair
+  l <- langItem
+  i <- mod
+  end <- getWordPair
+  return $ LangItemMod (Position start end) l i
+
+mod' :: Parser (Mod Position)
+mod' = do
+  start <- getWordPair
+  pub <- fmap (\x -> case x of
+                       Just _ -> Pub
+                       Nothing -> NonPub) $ optional $ symbol "pub"
+  symbol "mod"
+  id <- identifier
+  symbol "{"
+  decls <- many topLevelDecl
+  symbol "}"
+  end <- getWordPair
+  return $ Mod (Position start end) pub id decls
+-- TODO: finish pat and typeList and ty
+pat :: Parser (Pat Position)
+pat = undefined
+
+typeList :: Parser TypeList
+typeList = undefined
+
+ty :: Parser Type
+ty = undefined
+           
 -- TODO: Handle the error properly.
 toTranslationUnit :: String -> TranslationUnit Position
 toTranslationUnit str = unwrap $ parse translationUnit "" str
  where
    unwrap (Left err) = error $ show err
    unwrap (Right term) = term
-
-translationUnit' :: TranslationUnit Position
-translationUnit' = toTranslationUnit "fn main() -> Unit { extern print(I32) -> I32; let mut countdown = 100; while countdown { print(countdown); countdown = countdown - 1; 0 }; 0 };"
 
 parseTranslationUnit :: CString -> IO (StablePtr (TranslationUnit Position))
 parseTranslationUnit x = do
